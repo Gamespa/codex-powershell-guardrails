@@ -1,0 +1,4 @@
+interface:
+  display_name: "PowerShell Guardrails"
+  short_description: "Avoid Windows PowerShell command hazards"
+  default_prompt: "Use $powershell-guardrails to run Windows shell commands safely."
