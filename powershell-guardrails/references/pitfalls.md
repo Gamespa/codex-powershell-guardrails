@@ -24,11 +24,13 @@ Symptoms:
 - `Missing file specification after redirection operator`
 - `The token '&&' is not a valid statement separator`
 - `ParserError`
+- `Unexpected token '=' in expression or statement`
 
 Common causes:
 
 - `python - <<'PY'` copied from bash.
 - `cmd1 && cmd2` sent to Windows PowerShell 5.1.
+- `rg pattern file && $content = Get-Content file` sent to PowerShell 7.
 - Bash `$()` command substitution used in a local PowerShell layer.
 
 Safer pattern:
@@ -40,12 +42,25 @@ echo "portable payload"
 $script | ssh my-host bash -s
 ```
 
+For native command success checks followed by PowerShell work, keep the control flow in PowerShell:
+
+```powershell
+rg pattern file
+if ($LASTEXITCODE -eq 0) {
+  $content = Get-Content -LiteralPath file
+}
+```
+
+Do not chain into an assignment with `&&`.
+
 ## 3. Empty Pipe From Premature Variable Expansion
 
 Symptoms:
 
 - `An empty pipe element is not allowed.`
 - The error points to a line beginning with `|`.
+- `The term '.FullName' is not recognized`
+- A nested `pwsh -Command` loses `$_`, `$input`, or another automatic variable.
 
 Common cause:
 
@@ -55,13 +70,53 @@ git show HEAD:file.txt | powershell -NoProfile -Command "$input | Set-Content ou
 
 The outer PowerShell can expand `$input` before the nested shell receives it.
 
+The same issue happens with pipeline variables:
+
+```powershell
+pwsh -NoProfile -Command "Get-ChildItem | ForEach-Object { $_.FullName }"
+```
+
+If the outer PowerShell parses this string first, `$_` can disappear and the nested command receives `.FullName`.
+
 Safer patterns:
 
 ```powershell
 git show HEAD:file.txt | pwsh -NoProfile -Command '$input | Set-Content out.txt'
 ```
 
+```powershell
+pwsh -NoProfile -Command 'Get-ChildItem | ForEach-Object { $_.FullName }'
+```
+
 or avoid nested PowerShell and write to a file directly from the outer command.
+
+## 3a. Piping After PowerShell Statements
+
+Symptoms:
+
+- `ParserError`
+- `An empty pipe element is not allowed.`
+- The error points at `} | Format-Table`, `} | Format-List`, or another pipe after a statement.
+
+Common cause:
+
+```powershell
+foreach ($item in $items) {
+  [pscustomobject]@{ Name = $item.Name }
+} | Format-Table
+```
+
+`foreach` is a statement, not an expression in the pipeline position.
+
+Safer pattern:
+
+```powershell
+& {
+  foreach ($item in $items) {
+    [pscustomobject]@{ Name = $item.Name }
+  }
+} | Format-Table
+```
 
 ## 4. Windows To Remote Linux Quoting
 
@@ -79,18 +134,119 @@ set -euo pipefail
 user="$(id -un)"
 printf 'user=%s\n' "$user"
 '@
-$remote | ssh my-host bash -s
+($remote -replace "`r`n", "`n") | ssh my-host bash -s
 ```
 
 Switch to this pattern when remote commands include `$(...)`, heredocs, `xargs`, `sudo -u`, embedded JSON/Python/SQL, or nested quotes.
+
+## 4a. Remote `$(...)` Executed By Local PowerShell
+
+Symptoms:
+
+- `The term 'mktemp' is not recognized`
+- A remote command such as `$(mktemp -d)` fails locally before SSH runs it.
+- Remote variables arrive empty or malformed.
+
+Common causes:
+
+```powershell
+ssh my-host "tmp_dir=$(mktemp -d); tar -xf /tmp/app.tar -C $tmp_dir"
+```
+
+```powershell
+$script = @"
+set -euo pipefail
+tmp_dir="$(mktemp -d)"
+"@
+$script | ssh my-host bash -s
+```
+
+PowerShell expands `$()` inside double-quoted strings and double-quoted here-strings.
+
+Safer pattern:
+
+```powershell
+$script = @'
+set -euo pipefail
+tmp_dir="$(mktemp -d)"
+tar -xf /tmp/app.tar -C "$tmp_dir"
+'@
+($script -replace "`r`n", "`n") | ssh my-host bash -s
+```
+
+Use single-quoted here-strings for remote bash. Normalize CRLF to LF before sending to Linux.
+
+## 4b. `trap`, `sudo bash -lc`, And Nested Remote Quotes
+
+Symptoms:
+
+- `ParserError: Unexpected token 'set'`
+- `line 1: 'rm -rf...`
+- Bash `trap` lines are truncated or quoted incorrectly.
+- Adding more backslashes makes a command more fragile instead of fixing it.
+
+Common causes:
+
+```powershell
+$remote = "printf '%s' '$pw' | sudo bash -lc \"set -euo pipefail; source /etc/app.env; app reset\""
+ssh my-host $remote
+```
+
+```powershell
+ssh my-host "bash -lc 'tmp_dir=$(mktemp -d); trap 'rm -rf "$tmp_dir"' EXIT; app deploy'"
+```
+
+These commands cross PowerShell, OpenSSH, remote bash, nested bash, and sometimes `sudo`. Each layer has different quote rules.
+
+Safer pattern:
+
+```powershell
+$script = @'
+set -euo pipefail
+password="$1"
+printf '%s' "$password" | sudo bash -lc 'set -euo pipefail; source /etc/app.env; app reset --password-stdin'
+'@
+($script -replace "`r`n", "`n") | ssh my-host bash -s -- $pw
+```
+
+If the remote script has `trap` cleanup, write it as a local `.sh` file with LF line endings, upload it, then run `ssh my-host bash /tmp/script.sh`.
+
+## 4c. CRLF In Remote Bash Scripts
+
+Symptoms:
+
+- `command not found` where the command looks valid.
+- Error text includes a hidden carriage return such as `sort\r`.
+- Linux tools see paths or command names with a trailing `\r`.
+
+Common cause:
+
+PowerShell generated a script with Windows CRLF and sent it to Linux unchanged.
+
+Safer patterns:
+
+```powershell
+($script -replace "`r`n", "`n") | ssh my-host bash -s
+```
+
+```powershell
+$scriptLf = $script -replace "`r`n", "`n"
+[IO.File]::WriteAllText($scriptPath, $scriptLf, [Text.UTF8Encoding]::new($false))
+scp $scriptPath my-host:/tmp/script.sh
+ssh my-host bash /tmp/script.sh
+```
+
+Normalize line endings before piping or uploading scripts for Linux.
 
 ## 5. PATH Or Packaged Tool Resolution
 
 Symptoms:
 
 - `Program 'rg.exe' failed to run: Access is denied`
+- `The term '...\node.exe' is not recognized`
 - A tool works in one terminal but not inside the agent.
 - The command resolves to a packaged app or WindowsApps location.
+- A hard-coded bundled runtime path no longer exists after a plugin or app update.
 
 Safer pattern:
 
@@ -101,6 +257,16 @@ rg --version
 ```
 
 Install tools in a normal user or system directory and ensure that directory precedes packaged app shims in PATH.
+
+For bundled runtimes, discover the current executable before invoking it:
+
+```powershell
+$node = Get-Command node -ErrorAction SilentlyContinue
+if (-not $node) { throw "node was not found on PATH" }
+& $node.Source --version
+```
+
+Do not assume a cached plugin path is stable across app updates.
 
 ## 6. Long Command Strings And Large Patches
 
@@ -157,14 +323,30 @@ Use specific names such as `$hostName`, `$hostPath`, `$matchRecords`, or `$input
 Symptoms:
 
 - `curl: (35) schannel: next InitializeSecurityContext failed`
+- `curl: (35) schannel: failed to receive handshake`
 - `CRYPT_E_REVOCATION_OFFLINE`
 - `Invoke-WebRequest -Method Head` disagrees with another probe.
+- `The term 'true' is not recognized` when a supposed remote `curl ... || true` probe runs.
 
 Safer patterns:
 
 - Use `curl.exe` when you need the native curl binary.
 - Use `Invoke-WebRequest` when you intentionally want the PowerShell cmdlet.
 - Cross-check suspicious HTTPS failures from Windows with a remote Linux probe, browser, or service logs before declaring the service down.
+
+When probing from remote Linux, do not embed `curl ... || true` inside a fragile `ssh "bash -lc '...'"` one-liner. Send a script:
+
+```powershell
+$script = @'
+set -euo pipefail
+code="$(curl -sS -o /tmp/probe.out -w '%{http_code}' https://example.com/health || true)"
+printf '%s\n' "$code"
+cat /tmp/probe.out 2>/dev/null || true
+'@
+($script -replace "`r`n", "`n") | ssh my-host bash -s
+```
+
+If PowerShell reports `The term 'true' is not recognized`, local PowerShell parsed the bash fallback.
 
 ## 10. Missing Bash Or WSL
 
