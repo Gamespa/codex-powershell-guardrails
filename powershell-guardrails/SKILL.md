@@ -17,6 +17,7 @@ Use this skill when the active shell is Windows PowerShell or `pwsh` and the tas
 
 - `$`, `$_`, `$()`, quotes, pipes, `&&`, `||`, redirects, here-docs, here-strings, or inline JSON/Python/SQL.
 - Nested `pwsh -Command`, `ForEach-Object`, `Where-Object`, `$input`, `$_.FullName`, or scriptblocks inside another PowerShell command.
+- Regexes or test filters for tools/cmdlets (`rg`, `vitest -t`, `npm test -- -t`, `Select-String -Pattern`) that contain `|`, `[`, `]`, quotes, or backslashes.
 - `ssh` from Windows to Linux, especially with `sudo -u`, `bash -lc`, `trap`, `xargs`, `printf`, heredocs, command substitution, or nested quotes.
 - `.ps1` scripts, execution-policy errors, `curl`/`curl.exe`/`Invoke-WebRequest`, `rg`, `git diff`, wildcard arguments, or PATH/tool-resolution uncertainty.
 - Large command payloads, generated patches, full-file rewrites, or long inline scripts.
@@ -35,10 +36,13 @@ Before running a fragile command:
 4. Keep PowerShell syntax in PowerShell. Do not paste bash heredocs, `&&`, `||`, or command substitutions into PowerShell and hope they survive.
 5. Do not wrap nested PowerShell in double quotes when the payload contains `$`, `$_`, `$input`, `$Matches`, or `$()`. Use single quotes, a script file, or an outer scriptblock.
 6. If the command contains complex payloads, stop building a one-liner. Use a single-quoted here-string, a temporary script, stdin, or a file.
-7. For Windows-to-Linux remote work, assemble the remote script locally, normalize it to LF, and pass it through `ssh <host> bash -s`.
-8. Treat local Windows TLS errors from `curl.exe`/Schannel as local probe failures until cross-checked from Linux, browser, or service logs.
-9. For large patches or generated content, use small `apply_patch` hunks or a short script invocation. Avoid long command strings.
-10. For process cleanup, target a saved root PID and its children. Exclude the current shell, the agent process, and their parent chain.
+7. If a `foreach`, `if`, or other statement emits values before a pipe, wrap the statement in `& { ... } | ...`.
+8. If a regex or test filter contains `|`, bind it to a variable or pass it through an argument array so it remains one argument.
+9. For Windows-to-Linux remote work, assemble the remote script locally, normalize it to LF, and pass it through `ssh <host> bash -s`.
+10. Treat local Windows TLS errors from `curl.exe`/Schannel as local probe failures until cross-checked from Linux, browser, or service logs.
+11. For large patches or generated content, use small `apply_patch` hunks or a short script invocation. Avoid long command strings.
+12. Treat frequent `pwsh`/`pwsh-invocation` usage as a risk signal, not a failure by itself. Apply this checklist to the complex invocations.
+13. For process cleanup, target a saved root PID and its children. Exclude the current shell, the agent process, and their parent chain.
 
 ## Safe Patterns
 
@@ -101,11 +105,16 @@ Avoid broad process cleanup:
 - Using `powershell` by habit and accidentally running Windows PowerShell 5.1.
 - Wrapping nested PowerShell or bash payloads in double quotes so `$input`, `$_`, `$Matches`, `$Host`, `$(mktemp -d)`, or `$()` expands in the wrong layer.
 - Piping directly after a `foreach` statement block instead of wrapping the statement in `& { ... }`.
+- Letting an outer PowerShell strip `$lines` from `$lines[220..228]`, `$_` from `$_.LineNumber`, or loop variables from `foreach ($x in $xs)`.
+- Passing regex/test filters with `|` through multiple shell layers without proving they stayed one native argument.
 - Mixing PowerShell assignments with bash-style `&&`, such as `rg ... && $c = Get-Content ...`.
 - Using double-quoted here-strings for remote bash scripts that contain `$()`, `$var`, or `trap`.
+- Building JSON, Rust, regex, or code patches as dense inline strings instead of using a here-string, temp file, structured serializer, or `apply_patch`.
 - Using reserved or automatic variable names such as `$host`, `$matches`, or `$input` for ordinary data.
+- Assuming `pnpm`, `rg`, `node`, or another native tool exists without first checking `Get-Command` when resolution is suspicious.
 - Calling `curl` without deciding whether you mean the PowerShell alias or `curl.exe`.
 - Treating local Windows Schannel errors from `curl.exe` as proof that a remote HTTPS service is down.
+- Treating `Access is denied` on temp, database, or PID files as only a permissions problem before checking file locks and owning processes.
 - Trusting PowerShell wildcard expansion when the target tool has its own glob/pathspec syntax.
 - Fixing quoting by adding more quotes to a one-liner after the command already has multiple shell layers.
 
