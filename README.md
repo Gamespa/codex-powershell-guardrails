@@ -54,17 +54,26 @@ powershell-guardrails/
     openai.yaml
   references/
     pitfalls.md
+    pressure-scenarios.md
+scripts/
+  verify-skill.ps1
 ```
 
 - `SKILL.md` is the primary skill loaded by agents.
 - `references/pitfalls.md` expands recurring symptoms, causes, and safer command
   shapes.
+- `references/pressure-scenarios.md` captures prompts that should make an agent
+  choose safe command shapes when this skill is loaded.
 - `agents/openai.yaml` provides display metadata for Codex-compatible agents.
+- `scripts/verify-skill.ps1` runs repository quality gates for this skill.
 
 ## Core Guardrails
 
 - Prefer `pwsh -NoProfile` when you control invocation. Do not assume
   `powershell` means PowerShell 7.
+- If time is short, prioritize explicit `pwsh`, single-quoted nested payloads,
+  stdin for remote bash, executable verification, and read-only target probes
+  before destructive commands.
 - Verify executable resolution before diagnosing behavior:
   `Get-Command <tool> | Select-Object Source,Version`.
 - Keep PowerShell syntax in PowerShell. Do not paste bash heredocs or command
@@ -107,6 +116,16 @@ $testNamePattern = 'rewrites machine text|rewrites singular text'
 npm test -- --run path/to/test.spec.ts -t $testNamePattern
 ```
 
+Use argument arrays when generated commands contain regexes or paths that must
+stay single native arguments:
+
+```powershell
+$tool = (Get-Command rg -ErrorAction Stop).Source
+$searchPattern = 'service-password|service.*password'
+$args = @('--', $searchPattern, '.')
+& $tool @args
+```
+
 Run scripts with an explicit execution policy when needed:
 
 ```powershell
@@ -119,9 +138,18 @@ Keep the skill reusable across repositories and machines:
 
 - Add durable rules to `SKILL.md`.
 - Add concrete failure symptoms and replacements to `references/pitfalls.md`.
+- Add or update pressure scenarios in `references/pressure-scenarios.md` when a
+  rule is meant to change future agent behavior.
 - Keep examples generic. Avoid machine-specific paths, hostnames, secrets, or
   project-only conventions.
 - Prefer short, directly actionable guidance over narrative incident reports.
+
+Before committing changes, run:
+
+```powershell
+pwsh -NoProfile -ExecutionPolicy Bypass -File .\scripts\verify-skill.ps1
+git diff --check
+```
 
 ## License
 
