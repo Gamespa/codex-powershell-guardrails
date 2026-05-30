@@ -104,7 +104,7 @@ Bind regexes or test filters before passing them to native tools:
 
 ```powershell
 $testNamePattern = 'rewrites machine text|rewrites singular text'
-npm --prefix web test -- --run src/App.test.tsx -t $testNamePattern
+npm test -- --run path/to/test.spec.ts -t $testNamePattern
 ```
 
 Run scripts with an explicit execution policy when needed:
