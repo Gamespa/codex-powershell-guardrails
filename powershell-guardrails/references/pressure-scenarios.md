@@ -246,3 +246,73 @@ Treat the Windows Schannel error as a local probe failure until it is
 cross-checked from another client, a browser, a remote Linux probe, or service
 logs.
 ```
+
+## Scenario 9. Quoted Markup Search In PowerShell
+
+Prompt:
+
+```text
+Search the current repo for either <div class="trace-step" or id="tab- from Windows PowerShell.
+```
+
+Common failing answer:
+
+```powershell
+rg -n "<div class=\"trace-step\"|id=\"tab-" .\src
+```
+
+Why it fails:
+
+The embedded quotes and alternation can be consumed by PowerShell before `rg`
+receives the intended pattern. PowerShell may try to execute the second branch
+as a command or module name.
+
+Passing answer:
+
+```powershell
+$tool = (Get-Command rg -ErrorAction Stop).Source
+$needles = @('<div class="trace-step"', 'id="tab-')
+foreach ($needle in $needles) {
+  & $tool -n -F -- $needle .\src
+}
+```
+
+## Scenario 10. Local Service Smoke Test
+
+Prompt:
+
+```text
+From Windows PowerShell, start a local dev server, verify its health endpoint, and clean it up afterward.
+```
+
+Common failing answer:
+
+```powershell
+& .\app-server.exe
+```
+
+Why it fails:
+
+A healthy server can run until the command tool times out. The timeout alone
+does not prove startup failed, and it leaves cleanup ambiguous.
+
+Passing answer:
+
+```powershell
+$pidPath = Join-Path $env:TEMP 'app-smoke.pid'
+$proc = Start-Process -FilePath .\app-server.exe -WorkingDirectory (Get-Location).Path -WindowStyle Hidden -PassThru
+Set-Content -LiteralPath $pidPath -Value $proc.Id
+
+try {
+  $response = Invoke-WebRequest -Uri $env:APP_HEALTH_URL -UseBasicParsing -TimeoutSec 5
+  "status=$($response.StatusCode)"
+} catch {
+  "request-failed=$($_.Exception.Message)"
+}
+
+Get-NetTCPConnection -LocalPort $env:APP_PORT -State Listen -ErrorAction SilentlyContinue |
+  Select-Object LocalAddress, LocalPort, State, OwningProcess
+```
+
+Before cleanup, compare the recorded root PID with the listener owner and stop
+only the verified process or descendants.

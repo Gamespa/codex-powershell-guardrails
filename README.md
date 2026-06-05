@@ -20,9 +20,9 @@ command involves any fragile boundary, including:
   command substitution, or nested quotes.
 - `.ps1` execution policy, `curl` versus `curl.exe`, `rg`, `git diff`, wildcard
   handling, PATH uncertainty, or native tool resolution.
-- Large generated patches, full-file rewrites, process cleanup, or error
-  messages such as `ParserError`, `An empty pipe element is not allowed`, or
-  `The command line is too long`.
+- Large generated patches, full-file rewrites, local smoke-test servers,
+  process cleanup, or error messages such as `ParserError`, `An empty pipe
+  element is not allowed`, or `The command line is too long`.
 
 Do not use it for pure bash/Linux sessions unless a Windows PowerShell layer is
 composing the command.
@@ -86,6 +86,8 @@ scripts/
   `ssh <host> bash -s` instead of growing a quoted one-liner.
 - For process cleanup, target a known root PID and descendants, and exclude the
   current shell and agent process tree.
+- For long-running local services, separate launch, readiness probes, listener
+  PID checks, and cleanup.
 
 ## Safe Patterns
 

@@ -30,7 +30,9 @@ Use this skill when the active shell is Windows PowerShell or `pwsh` and the tas
   `Invoke-WebRequest`, `rg`, `git diff`, wildcard arguments, or
   PATH/tool-resolution uncertainty.
 - Large command payloads, generated patches, full-file rewrites, or long inline scripts.
-- Process cleanup with `Stop-Process`, `Get-CimInstance Win32_Process`, or broad command-line matching.
+- Local dev servers, smoke-test daemons, `Start-Process`, port probes,
+  PID files, log redirection, or process cleanup with `Stop-Process`,
+  `Get-CimInstance Win32_Process`, or broad command-line matching.
 - Errors such as `ParserError`, `An empty pipe element is not allowed`,
   `The token '&&' is not a valid statement separator`,
   `Missing file specification after redirection operator`,
@@ -52,6 +54,8 @@ If time is short, apply these first:
    before diagnosing project behavior.
 5. Before delete, move, stop, deploy, or other destructive commands, prove the
    target set with a read-only command.
+6. For local long-running services, split launch, readiness probe, and cleanup
+   into separate commands; record the root PID and verify the actual listener.
 
 ## Decision Checklist
 
@@ -83,6 +87,11 @@ Before running a fragile command:
 14. For destructive commands, first list the exact targets with a read-only
     command, then keep the final command in one shell with explicit
     `-LiteralPath` or native pathspec arguments.
+15. For local smoke-test servers, do not treat a foreground timeout as a
+    startup failure by itself. A server may simply be running. Probe the health
+    endpoint, listener PID, and logs in separate commands.
+16. If many simple PowerShell commands time out together, retry with smaller
+    read-only commands or a longer timeout before diagnosing project behavior.
 
 ## Safe Patterns
 
@@ -143,6 +152,28 @@ $args = @('--', $searchPattern, '.')
 & $tool @args
 ```
 
+For mixed quoted literals and regex alternation, bind the pattern first or use
+fixed-string searches:
+
+```powershell
+$tool = (Get-Command rg -ErrorAction Stop).Source
+$needles = @('<div class="trace-step"', 'id="tab-')
+foreach ($needle in $needles) {
+  & $tool -n -F -- $needle .\src
+}
+```
+
+Start a long-running local service separately from readiness checks:
+
+```powershell
+$pidPath = Join-Path $env:TEMP 'app-smoke.pid'
+$proc = Start-Process -FilePath .\app-server.exe -WorkingDirectory (Get-Location).Path -WindowStyle Hidden -PassThru
+Set-Content -LiteralPath $pidPath -Value $proc.Id
+Invoke-WebRequest -Uri $env:APP_HEALTH_URL -UseBasicParsing -TimeoutSec 5
+Get-NetTCPConnection -LocalPort $env:APP_PORT -State Listen -ErrorAction SilentlyContinue |
+  Select-Object LocalAddress, LocalPort, State, OwningProcess
+```
+
 Avoid broad process cleanup:
 
 ```powershell
@@ -160,7 +191,13 @@ Avoid broad process cleanup:
 - Letting an outer PowerShell strip `$lines` from `$lines[220..228]`, `$_`
   from `$_.LineNumber`, or loop variables from `foreach ($x in $xs)`.
 - Passing regex/test filters with `|` through multiple shell layers without proving they stayed one native argument.
+- Passing quoted markup or regex alternation to `rg` in one double-quoted
+  string until PowerShell treats pieces such as `id=` as a module or command.
 - Mixing PowerShell assignments with bash-style `&&`, such as `rg ... && $c = Get-Content ...`.
+- Running long-lived servers in the foreground under a short tool timeout, then
+  treating the timeout alone as evidence that startup failed.
+- Trusting a PID file alone for cleanup when the actual listener may be owned
+  by a child process. Verify the listener owner before stopping processes.
 - Using double-quoted here-strings for remote bash scripts that contain `$()`, `$var`, or `trap`.
 - Building JSON, Rust, regex, or code patches as dense inline strings instead
   of using a here-string, temp file, structured serializer, or `apply_patch`.
