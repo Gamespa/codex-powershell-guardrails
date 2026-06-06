@@ -316,3 +316,129 @@ Get-NetTCPConnection -LocalPort $env:APP_PORT -State Listen -ErrorAction Silentl
 
 Before cleanup, compare the recorded root PID with the listener owner and stop
 only the verified process or descendants.
+
+## Scenario 11. Variable Followed By Colon
+
+Prompt:
+
+```text
+From PowerShell, format a status line as name: value where both parts are variables.
+```
+
+Common failing answer:
+
+```powershell
+"$name: $value"
+```
+
+Why it fails:
+
+PowerShell can parse `$name:` as scoped-variable syntax instead of `$name`
+followed by a literal colon.
+
+Passing answer:
+
+```powershell
+"${name}: $value"
+```
+
+or:
+
+```powershell
+'{0}: {1}' -f $name, $value
+```
+
+## Scenario 12. API Request With Token And JSON
+
+Prompt:
+
+```text
+From PowerShell, send a POST request with a bearer token and a JSON body.
+```
+
+Common failing answer:
+
+```powershell
+pwsh -NoProfile -Command "Invoke-RestMethod -Method Post -Uri $uri -Headers @{ Authorization = ('Bearer ' + $token) } -Body '{\"state\":\"ready\"}'"
+```
+
+Why it fails:
+
+The command mixes nested PowerShell, hashtable syntax, token interpolation, and
+JSON escaping in one string. The outer shell can strip variables or break the
+JSON before the request is sent.
+
+Passing answer:
+
+```powershell
+param(
+  [string]$Token,
+  [string]$Uri
+)
+
+$headers = @{ Authorization = "Bearer $Token" }
+$body = [pscustomobject]@{ state = 'ready' } | ConvertTo-Json
+Invoke-RestMethod -Method Post -Uri $Uri -Headers $headers -Body $body -ContentType 'application/json'
+```
+
+Save that as a `.ps1` file and run it with `pwsh -NoProfile -File`, or use a
+structured runtime that serializes JSON without shell escaping.
+
+## Scenario 13. Native Batch Toolchain Setup
+
+Prompt:
+
+```text
+From PowerShell, run a native build command that requires a batch setup script first.
+```
+
+Common failing answer:
+
+```powershell
+& $env:DEV_CMD_PATH
+cargo test
+```
+
+Why it fails:
+
+Batch files mutate the environment of their `cmd.exe` process. Calling one from
+PowerShell does not make those PATH changes persist for the later command.
+
+Passing answer:
+
+```powershell
+$devCmd = $env:DEV_CMD_PATH
+if (-not $devCmd) { throw 'Set DEV_CMD_PATH to the batch file path first' }
+cmd.exe /d /c "call ""$devCmd"" && cargo test"
+```
+
+## Scenario 14. Git Environment Assignment
+
+Prompt:
+
+```text
+From PowerShell, run a Git probe with terminal prompts disabled.
+```
+
+Common failing answer:
+
+```powershell
+GIT_TERMINAL_PROMPT=0 git ls-remote origin
+```
+
+Why it fails:
+
+That is bash-style environment assignment. PowerShell parses it as a command or
+assignment expression, not as a temporary environment for Git.
+
+Passing answer:
+
+```powershell
+$oldPrompt = $env:GIT_TERMINAL_PROMPT
+try {
+  $env:GIT_TERMINAL_PROMPT = '0'
+  git ls-remote origin
+} finally {
+  $env:GIT_TERMINAL_PROMPT = $oldPrompt
+}
+```

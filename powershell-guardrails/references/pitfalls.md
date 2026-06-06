@@ -224,6 +224,59 @@ Safer patterns:
 - Use a single-quoted here-string for script payloads.
 - Use a temporary file when the payload contains many quotes or backslashes.
 - Use a structured serializer for JSON instead of hand-escaped JSON text.
+- For API calls with headers, tokens, JSON bodies, or several endpoints, write
+  a `.ps1` file or use a structured runtime. Do not hide the whole request in
+  nested `pwsh -Command` strings.
+- In a `.ps1` file, put the `param` block before setup statements,
+  assignments, or output-emitting lines.
+
+```powershell
+param(
+  [string]$Token,
+  [string]$Uri
+)
+
+$headers = @{ Authorization = "Bearer $Token" }
+$body = [pscustomobject]@{ state = 'ready' } | ConvertTo-Json
+Invoke-RestMethod -Method Post -Uri $Uri -Headers $headers -Body $body -ContentType 'application/json'
+```
+
+## 3d. Member Access And Indexing In Nested Commands
+
+Symptoms:
+
+- `.StatusCode: The term '.StatusCode' is not recognized`
+- `.ToString: The term '.ToString' is not recognized`
+- `.Path: The term '.Path' is not recognized`
+- `Unexpected token '[423]' in expression or statement`
+- `Missing type name after '['`
+
+Common causes:
+
+```powershell
+pwsh -NoProfile -Command "$response = Invoke-WebRequest $uri; $response.StatusCode"
+```
+
+```powershell
+pwsh -NoProfile -Command "(Get-Content -LiteralPath .\notes.md) [423]"
+```
+
+The first command lets the outer PowerShell expand `$response`, so the nested
+process receives `.StatusCode` as a command. The second separates an expression
+from its index operation and becomes fragile when nested or generated.
+
+Safer patterns:
+
+```powershell
+pwsh -NoProfile -Command '$response = Invoke-WebRequest $env:PROBE_URI; $response.StatusCode'
+```
+
+```powershell
+pwsh -NoProfile -Command '$lines = Get-Content -LiteralPath .\notes.md; $lines[423]'
+```
+
+For several member accesses, indexes, or endpoint probes, switch to a script
+file and pass values through parameters or environment variables.
 
 ## 4. Windows To Remote Linux Quoting
 
@@ -387,6 +440,44 @@ if (-not $pnpm) { throw 'pnpm was not found; use the repo package manager or ena
 
 Do not assume a cached plugin path is stable across app updates.
 
+## 5a. Native Batch Toolchain Boundaries
+
+Symptoms:
+
+- A command arrives as `=...\toolchain.bat` or `=` and PowerShell says the term
+  is not recognized.
+- A compiler or native tool is installed, but build commands still cannot find
+  it on PATH.
+- A batch setup script appears to run, but the environment change is not visible
+  to the next PowerShell command.
+
+Common causes:
+
+```powershell
+pwsh -NoProfile -Command "$devCmd = $env:DEV_CMD_PATH; cmd.exe /c call $devCmd && cargo test"
+```
+
+```powershell
+& $env:DEV_CMD_PATH
+cargo test
+```
+
+The first command lets an outer PowerShell expand variables before the nested
+process sees them. The second calls a `.bat` file in a child process, so PATH
+changes do not persist in the parent PowerShell session.
+
+Safer pattern:
+
+```powershell
+$devCmd = $env:DEV_CMD_PATH
+if (-not $devCmd) { throw 'Set DEV_CMD_PATH to the batch file path first' }
+cmd.exe /d /c "call ""$devCmd"" && cargo test"
+```
+
+Keep discovery of the batch file in PowerShell, then run dependent native
+commands inside the same `cmd.exe /d /c` payload. If the payload becomes long,
+write a small `.cmd` or `.ps1` wrapper instead of adding more quote layers.
+
 ## 6. Long Command Strings And Large Patches
 
 Symptoms:
@@ -436,6 +527,41 @@ Avoid using these names for ordinary variables:
 - `$Error` / `$error`
 
 Use specific names such as `$hostName`, `$hostPath`, `$matchRecords`, or `$inputText`.
+
+## 8a. Variables Followed By Punctuation
+
+Symptoms:
+
+- `Variable reference is not valid. ':' was not followed by a valid variable name character.`
+- A string such as `$path:` or `$reqId:` fails before the command reaches the
+  target tool.
+- A here-string that mixes status labels and variables stops with a
+  `ParserError`.
+
+Common cause:
+
+```powershell
+$name = 'request'
+$value = 'ok'
+"$name: $value"
+```
+
+Inside a double-quoted string or expandable here-string, PowerShell treats the
+colon as part of scoped-variable syntax unless the variable boundary is
+explicit.
+
+Safer patterns:
+
+```powershell
+"${name}: $value"
+```
+
+```powershell
+'{0}: {1}' -f $name, $value
+```
+
+Use the same rule when punctuation follows a variable before JSON, Markdown,
+HTTP headers, log labels, or generated command text.
 
 ## 9. `curl`, `curl.exe`, `Invoke-WebRequest`, And Schannel
 
@@ -596,6 +722,44 @@ ssh-keygen --% -q -t ed25519 -f C:\path\to\key -C "comment" -N ""
 Use PowerShell stop-parsing `--%` only for native Windows commands where passing
 the rest verbatim is the goal. Do not use it for commands that need PowerShell
 variable expansion after that point.
+
+## 13a. Git Auth And Environment Assignments
+
+Symptoms:
+
+- `=0: The term '=0' is not recognized`
+- `Permission denied (publickey)` from `git push`, `git fetch`, or
+  `git ls-remote`
+- A command works in Git Bash but fails when pasted into PowerShell.
+
+Common causes:
+
+```powershell
+GIT_TERMINAL_PROMPT=0 git ls-remote origin
+```
+
+```powershell
+pwsh -NoProfile -Command "GIT_TERMINAL_PROMPT='0'; git push origin HEAD"
+```
+
+PowerShell does not support bash-style one-command environment assignment. An
+SSH `Permission denied (publickey)` error is also an authentication failure, not
+proof that the remote repository or branch is missing.
+
+Safer pattern:
+
+```powershell
+$oldPrompt = $env:GIT_TERMINAL_PROMPT
+try {
+  $env:GIT_TERMINAL_PROMPT = '0'
+  git ls-remote origin
+} finally {
+  $env:GIT_TERMINAL_PROMPT = $oldPrompt
+}
+```
+
+If SSH auth fails, verify the configured remote and credential path explicitly
+before switching protocols or concluding that the repository is unavailable.
 
 ## 14. Parallel PowerShell Startup And Short Timeouts
 

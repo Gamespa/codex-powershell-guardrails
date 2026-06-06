@@ -30,6 +30,8 @@ Use this skill when the active shell is Windows PowerShell or `pwsh` and the tas
   `Invoke-WebRequest`, `rg`, `git diff`, wildcard arguments, or
   PATH/tool-resolution uncertainty.
 - Large command payloads, generated patches, full-file rewrites, or long inline scripts.
+- PowerShell interpolation where a variable is followed by `:`, `[`, `.`,
+  quotes, or other punctuation that can change the variable boundary.
 - Local dev servers, smoke-test daemons, `Start-Process`, port probes,
   PID files, log redirection, or process cleanup with `Stop-Process`,
   `Get-CimInstance Win32_Process`, or broad command-line matching.
@@ -56,6 +58,10 @@ If time is short, apply these first:
    target set with a read-only command.
 6. For local long-running services, split launch, readiness probe, and cleanup
    into separate commands; record the root PID and verify the actual listener.
+7. For API headers, tokens, JSON bodies, or many endpoint probes, use a script
+   file or structured serializer instead of a nested one-liner.
+8. If interpolation puts punctuation after a variable, use `${name}` or
+   `'{0}: {1}' -f $name, $value` to mark the boundary.
 
 ## Decision Checklist
 
@@ -92,6 +98,17 @@ Before running a fragile command:
     endpoint, listener PID, and logs in separate commands.
 16. If many simple PowerShell commands time out together, retry with smaller
     read-only commands or a longer timeout before diagnosing project behavior.
+17. If a variable is followed by `:`, `[`, `.`, or quoted text in an
+    interpolated string, brace the name or use `-f` formatting.
+18. If a command includes API headers, tokens, JSON bodies, here-strings, or
+    several endpoint calls, put the request in a `.ps1` file or use a
+    structured runtime such as Node. Keep a PowerShell `param` block first.
+19. For native batch setup such as compiler environments, call the batch file
+    through `cmd.exe /d /c "call ... && ..."`. Do not expect a `.bat` file to
+    mutate the parent PowerShell process.
+20. For Git or native tools that need one-command environment variables, set
+    `$env:NAME` in PowerShell or use a wrapper script. Bash-style
+    `NAME=value command` is not PowerShell syntax.
 
 ## Safe Patterns
 
@@ -163,6 +180,9 @@ foreach ($needle in $needles) {
 }
 ```
 
+For variable-boundary, API request, and native batch setup examples, use
+`references/pitfalls.md` sections 8a, 3c, and 5a.
+
 Start a long-running local service separately from readiness checks:
 
 ```powershell
@@ -201,6 +221,11 @@ Avoid broad process cleanup:
 - Using double-quoted here-strings for remote bash scripts that contain `$()`, `$var`, or `trap`.
 - Building JSON, Rust, regex, or code patches as dense inline strings instead
   of using a here-string, temp file, structured serializer, or `apply_patch`.
+- Treating `"$name: $value"` or `NAME=value git push` parse failures as tool
+  failures. Mark variable boundaries and set environment variables with
+  PowerShell syntax.
+- Hiding API JSON, `param` blocks, or native `.bat` setup inside generated
+  one-liners instead of using scripts, serializers, or `cmd.exe`.
 - Using reserved or automatic variable names such as `$host`, `$matches`, or `$input` for ordinary data.
 - Assuming `pnpm`, `rg`, `node`, or another native tool exists without first
   checking `Get-Command` when resolution is suspicious.
