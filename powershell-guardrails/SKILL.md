@@ -30,6 +30,8 @@ Use this skill when the active shell is Windows PowerShell or `pwsh` and the tas
   `Invoke-WebRequest`, `rg`, `git diff`, wildcard arguments, or
   PATH/tool-resolution uncertainty.
 - Large command payloads, generated patches, full-file rewrites, or long inline scripts.
+- Recursive file metrics, line counts, or inventory reports that combine
+  `Get-ChildItem`, `Where-Object`, `ForEach-Object`, member access, and sorting.
 - PowerShell interpolation where a variable is followed by `:`, `[`, `.`,
   quotes, or other punctuation that can change the variable boundary.
 - Local dev servers, smoke-test daemons, `Start-Process`, port probes,
@@ -62,6 +64,8 @@ If time is short, apply these first:
    file or structured serializer instead of a nested one-liner.
 8. If interpolation puts punctuation after a variable, use `${name}` or
    `'{0}: {1}' -f $name, $value` to mark the boundary.
+9. For file metrics, line counts, or inventory reports, use a script file or a
+   structured runtime after the first nested PowerShell parse failure.
 
 ## Decision Checklist
 
@@ -109,6 +113,9 @@ Before running a fragile command:
 20. For Git or native tools that need one-command environment variables, set
     `$env:NAME` in PowerShell or use a wrapper script. Bash-style
     `NAME=value command` is not PowerShell syntax.
+21. If a recursive inventory command loses `$files`, `$_`, `.Name`, or
+    `.FullName`, stop repairing the one-liner. Use `rg --files`, `git ls-files`,
+    a `.ps1` file, or Node/Python for the filesystem walk.
 
 ## Safe Patterns
 
@@ -180,8 +187,8 @@ foreach ($needle in $needles) {
 }
 ```
 
-For variable-boundary, API request, and native batch setup examples, use
-`references/pitfalls.md` sections 8a, 3c, and 5a.
+For variable-boundary, API request, native batch setup, and recursive inventory
+examples, use `references/pitfalls.md` sections 8a, 3c, 5a, and 3e.
 
 Start a long-running local service separately from readiness checks:
 

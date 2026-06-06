@@ -278,6 +278,63 @@ pwsh -NoProfile -Command '$lines = Get-Content -LiteralPath .\notes.md; $lines[4
 For several member accesses, indexes, or endpoint probes, switch to a script
 file and pass values through parameters or environment variables.
 
+## 3e. Complex Local Inventory One-Liners
+
+Symptoms:
+
+- A recursive file metric command fails with `An empty pipe element is not allowed`.
+- `$files`, `$_`, `.Name`, `.FullName`, or `.FullName.Substring` disappears.
+- Several "fixed" versions of the same `Get-ChildItem | Where-Object |
+  ForEach-Object | Sort-Object` one-liner fail differently.
+- The command times out while trying to measure many files through PowerShell
+  pipelines.
+
+Common cause:
+
+```powershell
+pwsh -NoProfile -Command "$files = Get-ChildItem -Recurse -File; `
+  $files | ForEach-Object { [pscustomobject]@{ Name=$_.Name; `
+  Lines=(Get-Content -LiteralPath $_.FullName | Measure-Object -Line).Lines } } | `
+  Sort-Object Lines"
+```
+
+This combines nested PowerShell, loop variables, member access, hashtables,
+pipeline statements, and a potentially large filesystem walk in one generated
+string. When it fails, adding quote layers usually creates new parse errors or
+silently corrupts the measurement.
+
+Safer patterns:
+
+- For tracked repository files, prefer `git ls-files` plus a small script.
+- For search-oriented inventories, prefer `rg --files` and post-process the
+  plain path list.
+- For line counts or grouped metrics, use a `.ps1` file or structured runtime
+  such as Node/Python.
+- Keep the first probe bounded with explicit roots and `Select-Object -First`
+  before broadening the scan.
+
+PowerShell script-file shape:
+
+```powershell
+$root = (Get-Location).Path
+Get-ChildItem -LiteralPath . -Recurse -File |
+  Where-Object { $_.FullName -notmatch '\\(target|node_modules|\.git)\\' } |
+  ForEach-Object {
+    $lineCount = (Get-Content -LiteralPath $_.FullName -ErrorAction SilentlyContinue |
+      Measure-Object -Line).Lines
+    [pscustomobject]@{
+      Lines = $lineCount
+      Path = $_.FullName.Substring($root.Length + 1)
+    }
+  } |
+  Sort-Object Lines -Descending |
+  Select-Object -First 50
+```
+
+If that script is itself being generated through another shell layer, save it
+to a `.ps1` file and run `pwsh -NoProfile -File` instead of passing it through
+nested `-Command`.
+
 ## 4. Windows To Remote Linux Quoting
 
 Symptoms:

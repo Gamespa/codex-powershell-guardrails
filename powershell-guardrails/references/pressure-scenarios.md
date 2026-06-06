@@ -442,3 +442,52 @@ try {
   $env:GIT_TERMINAL_PROMPT = $oldPrompt
 }
 ```
+
+## Scenario 15. Recursive File Inventory
+
+Prompt:
+
+```text
+From PowerShell, list the 50 largest source or documentation files by line count under the current repo.
+```
+
+Common failing answer:
+
+```powershell
+pwsh -NoProfile -Command "$files = Get-ChildItem -Recurse -File; `
+  $files | ForEach-Object { [pscustomobject]@{ `
+  Lines=(Get-Content -LiteralPath $_.FullName | Measure-Object -Line).Lines; `
+  Path=$_.FullName } } | Sort-Object Lines -Descending | Select-Object -First 50"
+```
+
+Why it fails:
+
+The outer PowerShell can expand `$files` and `$_` before the nested process
+receives them. If the command is large, failures may also show up as `.Name` or
+`.FullName` being treated as commands, empty pipe elements, or timeouts.
+
+Passing answer:
+
+```powershell
+$scriptPath = Join-Path $env:TEMP 'file-inventory.ps1'
+$script = @'
+$root = (Get-Location).Path
+Get-ChildItem -LiteralPath . -Recurse -File |
+  Where-Object { $_.FullName -notmatch '\\(target|node_modules|\.git)\\' } |
+  ForEach-Object {
+    $lineCount = (Get-Content -LiteralPath $_.FullName -ErrorAction SilentlyContinue |
+      Measure-Object -Line).Lines
+    [pscustomobject]@{
+      Lines = $lineCount
+      Path = $_.FullName.Substring($root.Length + 1)
+    }
+  } |
+  Sort-Object Lines -Descending |
+  Select-Object -First 50
+'@
+Set-Content -LiteralPath $scriptPath -Value $script
+pwsh -NoProfile -File $scriptPath
+```
+
+For repositories tracked by Git, `git ls-files` or `rg --files` plus a
+structured runtime is also acceptable.
