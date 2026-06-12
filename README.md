@@ -56,6 +56,8 @@ powershell-guardrails/
     pitfalls.md
     pressure-scenarios.md
 scripts/
+  verify.ps1
+  verify-pressure-scenarios.ps1
   verify-skill.ps1
 ```
 
@@ -64,8 +66,12 @@ scripts/
   shapes.
 - `references/pressure-scenarios.md` captures prompts that should make an agent
   choose safe command shapes when this skill is loaded.
-- `agents/openai.yaml` provides display metadata for Codex-compatible agents.
+- `agents/openai.yaml` provides the display name and trigger prompt used by
+  Codex-compatible agents.
 - `scripts/verify-skill.ps1` runs repository quality gates for this skill.
+- `scripts/verify-pressure-scenarios.ps1` verifies that each pressure scenario
+  has a prompt, failing answer, failure explanation, and passing answer.
+- `scripts/verify.ps1` runs the full repository validation chain.
 
 ## Core Guardrails
 
@@ -149,9 +155,11 @@ Keep the skill reusable across repositories and machines:
 Before committing changes, run:
 
 ```powershell
-pwsh -NoProfile -ExecutionPolicy Bypass -File .\scripts\verify-skill.ps1
-git diff --check
+pwsh -NoProfile -ExecutionPolicy Bypass -File .\scripts\verify.ps1
 ```
+
+If you change only scenario wording, rerun the full verifier to keep the chain
+honest.
 
 ## License
 

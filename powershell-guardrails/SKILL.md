@@ -260,4 +260,5 @@ For concrete symptoms, causes, and safe replacements, read
 already failed.
 
 For validation prompts that exercise the most important failure modes, read
-`references/pressure-scenarios.md` before changing this skill's rules.
+`references/pressure-scenarios.md` before changing this skill's rules. Run
+`scripts/verify.ps1` after editing those scenarios.

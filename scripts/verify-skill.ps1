@@ -37,6 +37,8 @@ $requiredFiles = @(
   'powershell-guardrails/agents/openai.yaml',
   'powershell-guardrails/references/pitfalls.md',
   'powershell-guardrails/references/pressure-scenarios.md',
+  'scripts/verify.ps1',
+  'scripts/verify-pressure-scenarios.ps1',
   'scripts/verify-skill.ps1'
 )
 
@@ -88,6 +90,11 @@ Require-Text 'powershell-guardrails/references/pressure-scenarios.md' '^## Scena
 Require-Text 'powershell-guardrails/references/pressure-scenarios.md' '^## Scenario 13\. Native Batch Toolchain Setup$' 'native batch toolchain pressure scenario'
 Require-Text 'powershell-guardrails/references/pressure-scenarios.md' '^## Scenario 15\. Recursive File Inventory$' 'recursive file inventory pressure scenario'
 Require-Text 'README.md' 'scripts/verify-skill\.ps1' 'verification command'
+Require-Text 'README.md' 'scripts/verify-pressure-scenarios\.ps1' 'pressure-scenario verification command'
+Require-Text 'README.md' 'scripts/verify\.ps1' 'full verification command'
+Require-Text 'scripts/verify-skill.ps1' 'verify-pressure-scenarios\.ps1' 'pressure scenario verifier invocation'
+Require-Text 'scripts/verify-skill.ps1' 'verify\.ps1' 'full verification entrypoint reference'
+Require-Text 'scripts/verify.ps1' 'git diff --check' 'diff hygiene check'
 
 $scenarioPath = Join-Path $repoRoot 'powershell-guardrails/references/pressure-scenarios.md'
 $scenarioCount = (Select-String -LiteralPath $scenarioPath -Pattern '^## Scenario ' | Measure-Object).Count
@@ -152,5 +159,8 @@ if ($failures.Count -gt 0) {
   }
   exit 1
 }
+
+$pressureVerifier = Join-Path $repoRoot 'scripts/verify-pressure-scenarios.ps1'
+& $pressureVerifier
 
 Write-Host 'PowerShell guardrails skill verification passed.'
