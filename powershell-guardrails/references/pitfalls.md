@@ -28,12 +28,14 @@ Symptoms:
 - `The token '&&' is not a valid statement separator`
 - `ParserError`
 - `Unexpected token '=' in expression or statement`
+- `The term 'head' is not recognized`
 
 Common causes:
 
 - `python - <<'PY'` copied from bash.
 - `cmd1 && cmd2` sent to Windows PowerShell 5.1.
 - `rg pattern file && $content = Get-Content file` sent to PowerShell 7.
+- `rg pattern . | head` copied from bash into local PowerShell.
 - Bash `$()` command substitution used in a local PowerShell layer.
 
 Safer pattern:
@@ -55,6 +57,10 @@ if ($LASTEXITCODE -eq 0) {
 ```
 
 Do not chain into an assignment with `&&`.
+
+For local output limits, use `Select-Object -First`; reserve `head`, `tail`,
+`xargs`, and similar filters for pipelines that fully run in bash, WSL, Git
+Bash, or remote Linux.
 
 ## 3. Empty Pipe From Premature Variable Expansion
 
@@ -457,6 +463,35 @@ ssh my-host bash /tmp/script.sh
 ```
 
 Normalize line endings before piping or uploading scripts for Linux.
+
+## 4d. Remote Search Regexes In Inline SSH
+
+Symptoms:
+
+- Local PowerShell reports a regex branch as an unknown term or module.
+- `ParserError` points at `|`, `()`, or quotes inside a remote `grep`,
+  `git grep`, or `rg` pattern.
+
+Common cause:
+
+```powershell
+ssh my-host "cd /srv/app && grep -R \"Foo\|Bar\|baz()\" -n src | head -n 50"
+```
+
+Backslash does not escape nested double quotes for PowerShell, so the local
+PowerShell layer can parse pieces of the remote regex before OpenSSH sends it.
+
+Safer patterns:
+
+For a tiny command with no local interpolation, make the whole remote command
+one local single-quoted argument:
+
+```powershell
+ssh my-host 'cd /srv/app && grep -RInE -- "Foo|Bar|baz\(\)" src | head -n 50'
+```
+
+For anything longer, use the stdin script pattern from section 4 and bind the
+regex inside remote bash.
 
 ## 5. PATH Or Packaged Tool Resolution
 

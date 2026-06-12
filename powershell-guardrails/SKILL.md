@@ -218,9 +218,13 @@ Avoid broad process cleanup:
 - Letting an outer PowerShell strip `$lines` from `$lines[220..228]`, `$_`
   from `$_.LineNumber`, or loop variables from `foreach ($x in $xs)`.
 - Passing regex/test filters with `|` through multiple shell layers without proving they stayed one native argument.
+- Using `\"` as if it escapes nested double quotes in PowerShell, especially in
+  `ssh "..."` commands that contain remote regexes.
 - Passing quoted markup or regex alternation to `rg` in one double-quoted
   string until PowerShell treats pieces such as `id=` as a module or command.
 - Mixing PowerShell assignments with bash-style `&&`, such as `rg ... && $c = Get-Content ...`.
+- Piping local PowerShell output to Unix-only filters such as `head` instead of
+  using `Select-Object -First`.
 - Running long-lived servers in the foreground under a short tool timeout, then
   treating the timeout alone as evidence that startup failed.
 - Trusting a PID file alone for cleanup when the actual listener may be owned

@@ -491,3 +491,35 @@ pwsh -NoProfile -File $scriptPath
 
 For repositories tracked by Git, `git ls-files` or `rg --files` plus a
 structured runtime is also acceptable.
+
+## Scenario 16. Remote Grep Alternation Over SSH
+
+Prompt:
+
+```text
+From Windows PowerShell, search a remote Linux repo for either Foo, Bar, or baz() and show the first 50 matches.
+```
+
+Common failing answer:
+
+```powershell
+ssh my-host "cd /srv/app && grep -R \"Foo\|Bar\|baz()\" -n src | head -n 50"
+```
+
+Why it fails:
+
+PowerShell does not use backslash to escape nested double quotes. The local
+PowerShell layer can parse the remote regex alternation or parentheses before
+OpenSSH sends the command.
+
+Passing answer:
+
+```powershell
+$remoteScript = @'
+set -euo pipefail
+cd /srv/app
+pattern='Foo|Bar|baz\(\)'
+grep -RInE -- "$pattern" src | head -n 50
+'@
+($remoteScript -replace "`r`n", "`n") | ssh my-host bash -s
+```
