@@ -341,6 +341,45 @@ If that script is itself being generated through another shell layer, save it
 to a `.ps1` file and run `pwsh -NoProfile -File` instead of passing it through
 nested `-Command`.
 
+## 3f. Exit-Code Branches In Fragile Commands
+
+Symptoms:
+
+- A combined probe fails because `$LASTEXITCODE` disappears or becomes a bare
+  token.
+- `-eq: The term '-eq' is not recognized` or `-ne: The term '-ne' is not
+  recognized` after a nested probe is squeezed into one string.
+- `if ($LASTEXITCODE -ne 0) { ... }` is appended to a nested one-liner and
+  starts a new parse error.
+- The command works as two separate lines but breaks when compressed into one
+  generated string.
+
+Risky shape:
+
+```powershell
+pwsh -NoProfile -Command "rg pattern file; if ($LASTEXITCODE -ne 0) { exit 1 }"
+```
+
+From an outer PowerShell prompt, the double-quoted `-Command` payload lets the
+outer layer expand `$LASTEXITCODE` before the child shell sees it. In generated
+or nested commands, adding a success/failure branch to the same string also
+makes the parser and control flow share the same fragile layer.
+
+Safer patterns:
+
+```powershell
+& {
+  rg pattern file
+  if ($LASTEXITCODE -ne 0) {
+    exit 1
+  }
+}
+```
+
+Or move the branch into a `.ps1` file and keep the native probe and PowerShell
+control flow together there. If the command already spans multiple tools or
+shell layers, do not add a one-liner exit-code shim after the fact.
+
 ## 4. Windows To Remote Linux Quoting
 
 Symptoms:

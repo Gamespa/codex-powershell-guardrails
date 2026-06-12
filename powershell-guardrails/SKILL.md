@@ -66,6 +66,9 @@ If time is short, apply these first:
    `'{0}: {1}' -f $name, $value` to mark the boundary.
 9. For file metrics, line counts, or inventory reports, use a script file or a
    structured runtime after the first nested PowerShell parse failure.
+10. If a fragile command needs exit-code branching, keep the `if ($LASTEXITCODE
+    ...)` logic in the same script file or script block. Do not bolt it onto a
+    one-liner that already crossed shell layers.
 
 ## Decision Checklist
 
@@ -116,6 +119,9 @@ Before running a fragile command:
 21. If a recursive inventory command loses `$files`, `$_`, `.Name`, or
     `.FullName`, stop repairing the one-liner. Use `rg --files`, `git ls-files`,
     a `.ps1` file, or Node/Python for the filesystem walk.
+22. If a native command needs a success/failure branch, write the branch in a
+    script file or `& { ... }` block instead of chaining `if ($LASTEXITCODE -eq
+    0)` onto an already fragile one-liner.
 
 ## Safe Patterns
 

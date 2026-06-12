@@ -492,7 +492,43 @@ pwsh -NoProfile -File $scriptPath
 For repositories tracked by Git, `git ls-files` or `rg --files` plus a
 structured runtime is also acceptable.
 
-## Scenario 16. Remote Grep Alternation Over SSH
+## Scenario 16. Exit-Code Branch In A Fragile Probe
+
+Prompt:
+
+```text
+From PowerShell, run a native search command and exit with code 1 only when the search fails.
+```
+
+Common failing answer:
+
+```powershell
+pwsh -NoProfile -Command "rg pattern file; if ($LASTEXITCODE -ne 0) { exit 1 }"
+```
+
+Why it fails:
+
+From an outer PowerShell prompt, the double-quoted child `-Command` payload can
+expand `$LASTEXITCODE` in the wrong layer. Compressing the success/failure
+branch into the same nested one-liner makes the parser and control flow share a
+fragile string.
+
+Passing answer:
+
+```powershell
+& {
+  rg pattern file
+  if ($LASTEXITCODE -ne 0) {
+    exit 1
+  }
+}
+```
+
+If that probe also needs JSON, environment setup, or remote execution, put the
+branch in a `.ps1` file and keep the native probe and control flow together
+there.
+
+## Scenario 17. Remote Grep Alternation Over SSH
 
 Prompt:
 
