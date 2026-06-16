@@ -86,10 +86,12 @@ If time is short, apply these first:
 - **Regex and test filters:** Bind filters containing `|` or quotes to a
   variable, or pass them through an argument array.
 - **Windows-to-Linux SSH:** Assemble the remote script locally, normalize it to
-  LF, and pass it through stdin with `ssh <host> bash -s`.
+  LF, and pass it through stdin with `ssh <host> bash -s`. Keep remote
+  `$...` variables in the remote or embedded-language layer.
 - **Generated payloads:** For JSON, code, SQL, regex, or large patches, use a
   single-quoted here-string, temporary script, stdin, file, serializer, or
-  `apply_patch`.
+  `apply_patch`. Normalize scripts, patches, and stdin payloads before sending
+  them to Unix or strict text tools.
 - **Destructive cleanup:** First list exact targets, then keep the final command
   in one shell with explicit `-LiteralPath` or native pathspec arguments.
 - **Local service startup:** Treat foreground timeout as inconclusive. Probe

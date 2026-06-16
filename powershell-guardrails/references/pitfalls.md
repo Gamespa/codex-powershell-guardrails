@@ -402,6 +402,17 @@ printf 'user=%s\n' "$user"
 Switch to this pattern when remote commands include `$(...)`, heredocs,
 `xargs`, `sudo -u`, embedded JSON/Python/SQL, or nested quotes.
 
+Do the same when the remote payload contains target-language `$...` variables
+such as shell positional args, awk fields, or Perl variables:
+
+```powershell
+$remote = @'
+find . -type f | awk '{print $1}'
+printf '%s\n' "$1"
+'@
+($remote -replace "`r`n", "`n") | ssh my-host bash -s -- value
+```
+
 ## 4a. Remote `$(...)` Executed By Local PowerShell
 
 Symptoms:
@@ -476,17 +487,20 @@ printf '%s' "$password" | sudo bash -lc 'set -euo pipefail; source /etc/app.env;
 If the remote script has `trap` cleanup, write it as a local `.sh` file with LF
 line endings, upload it, then run `ssh my-host bash /tmp/script.sh`.
 
-## 4c. CRLF In Remote Bash Scripts
+## 4c. CRLF In Unix-Bound Payloads
 
 Symptoms:
 
 - `command not found` where the command looks valid.
 - Error text includes a hidden carriage return such as `sort\r`.
 - Linux tools see paths or command names with a trailing `\r`.
+- `git apply`, `patch`, `sed`, `awk`, or a compiler rejects generated text
+  that looked valid in PowerShell.
 
 Common cause:
 
-PowerShell generated a script with Windows CRLF and sent it to Linux unchanged.
+PowerShell generated a script, patch, stdin payload, or temporary file with
+Windows CRLF and sent it to a Unix or strict text tool unchanged.
 
 Safer patterns:
 
@@ -501,7 +515,8 @@ scp $scriptPath my-host:/tmp/script.sh
 ssh my-host bash /tmp/script.sh
 ```
 
-Normalize line endings before piping or uploading scripts for Linux.
+Normalize line endings before piping or uploading scripts, patches, or other
+generated text for Unix tools.
 
 ## 4d. Remote Search Regexes In Inline SSH
 
