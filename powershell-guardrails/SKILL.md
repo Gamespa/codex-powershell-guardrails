@@ -1,6 +1,6 @@
 ---
 name: powershell-guardrails
-description: Use when composing fragile Windows PowerShell or pwsh commands involving native tools, SSH, curl.exe, process cleanup, quoting, or errors like ParserError, Access is denied, command line is too long, or running scripts is disabled.
+description: Use when composing fragile Windows PowerShell or pwsh commands involving native tools, SSH, curl.exe, sensitive output, remote jobs, encoding, exit codes, process cleanup, quoting, or errors like ParserError, Access is denied, command line is too long, or running scripts is disabled.
 ---
 
 # PowerShell Guardrails
@@ -37,6 +37,10 @@ work includes any of these:
   quotes, or other punctuation.
 - Local dev servers, smoke-test daemons, `Start-Process`, port probes, PID
   files, log redirection, or process cleanup.
+- Native probes where empty output, stderr, or an exit code distinguishes no
+  data from command failure.
+- Sensitive searches, machine-readable native output, or long-running remote
+  builds that must survive a local timeout.
 - Errors such as `ParserError`, `An empty pipe element is not allowed`,
   `The token '&&' is not a valid statement separator`,
   `Missing file specification after redirection operator`,
@@ -70,6 +74,12 @@ If time is short, apply these first:
    nested PowerShell parse failure.
 10. If a native command needs success/failure branching, keep the branch in the
     same script file or script block.
+11. Treat empty stdout as ambiguous until the command's exit code and stderr
+    prove whether it succeeded, found nothing, or failed.
+12. For sensitive searches, emit only sanitized metadata such as path, line,
+    and match type. Do not print the matched value.
+13. For remote long-running jobs, save the remote PID, log, and exit status;
+    check them before retrying after a local timeout.
 
 ## Guardrails
 
@@ -90,12 +100,20 @@ If time is short, apply these first:
   `$...` variables in the remote or embedded-language layer.
 - **Generated payloads:** For JSON, code, SQL, regex, or large patches, use a
   single-quoted here-string, temporary script, stdin, file, serializer, or
-  `apply_patch`. Normalize scripts, patches, and stdin payloads before sending
-  them to Unix or strict text tools.
+  `apply_patch`. Send Unix-bound text as LF and UTF-8 without a BOM; use base64
+  when exact bytes or control characters must survive multiple parser layers.
+- **Native command outcomes:** Know tool-specific exit codes. Empty output is
+  not proof of no data; capture stderr and distinguish no match from failure.
+- **Structured native output:** Prefer JSON, NUL-delimited output, or objects
+  over splitting human-readable `path:line:text` output.
+- **Sensitive output:** Filter secrets, tokens, credentials, and connection
+  strings inside the same shell or script. Emit only non-sensitive metadata.
 - **Destructive cleanup:** First list exact targets, then keep the final command
-  in one shell with explicit `-LiteralPath` or native pathspec arguments.
+  in one shell with `-LiteralPath` where supported or native pathspec arguments.
 - **Local service startup:** Treat foreground timeout as inconclusive. Probe
   health, listener PID, and logs separately.
+- **Remote long-running jobs:** Treat a local SSH timeout as inconclusive.
+  Detach all remote standard streams and persist PID, log, and status files.
 - **Process cleanup:** Target a saved root PID and descendants. Exclude the
   current shell, agent process, and their parent chain.
 - **Suspicious tool behavior:** Verify executable resolution before diagnosing
@@ -172,6 +190,9 @@ pwsh -NoProfile -ExecutionPolicy Bypass -File .\scripts\verify.ps1
   second read-only check.
 - Assuming `pnpm`, `rg`, `node`, `curl`, or another native tool resolves to the
   executable you intended.
+- Using `$PID` as a scratch variable even though PowerShell reserves it.
+- Assuming every filesystem cmdlet supports `-LiteralPath`; `New-Item` uses
+  `-Path`.
 
 ## References
 

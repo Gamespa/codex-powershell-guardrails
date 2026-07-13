@@ -380,6 +380,92 @@ Or move the branch into a `.ps1` file and keep the native probe and PowerShell
 control flow together there. If the command already spans multiple tools or
 shell layers, do not add a one-liner exit-code shim after the fact.
 
+## 3g. Empty Output And Native Search Exit Codes
+
+Symptoms:
+
+- A successful search with no matches is reported as a command failure.
+- An actual search error is reported as "nothing found."
+- `set -e` stops a remote script before later checks run.
+
+Common cause:
+
+Search tools often have more than two outcomes. For `rg` and `grep`, exit code
+`0` means a match, `1` means no match, and `2` or greater means an error. Empty
+stdout alone does not identify which outcome occurred.
+
+Safer pattern:
+
+```powershell
+$tool = (Get-Command rg -ErrorAction Stop).Source
+& $tool -l -- 'optional-feature' .
+$searchExit = $LASTEXITCODE
+
+switch ($searchExit) {
+  0 { 'matches-found' }
+  1 { 'no-matches' }
+  default { throw "rg failed with exit code $searchExit" }
+}
+```
+
+In remote bash scripts that use `set -e`, put an expected no-match probe inside
+an explicit `if` or temporarily capture its status before restoring strict
+error handling. Do not append `|| true` when real search errors must remain
+visible.
+
+## 3h. Parsing Human-Readable Native Output
+
+Symptoms:
+
+- Splitting `path:line:text` on `:` corrupts Windows paths or timestamped log
+  lines.
+- A path, line number, or match value is assigned to the wrong field.
+- Colored or localized output breaks a parser that previously worked.
+
+Safer pattern:
+
+Use a native machine-readable mode when one exists. For example, parse
+`rg --json` events instead of splitting display text:
+
+```powershell
+$tool = (Get-Command rg -ErrorAction Stop).Source
+& $tool --json -- 'request failed' . |
+  ForEach-Object {
+    $event = $_ | ConvertFrom-Json
+    if ($event.type -eq 'match') {
+      [pscustomobject]@{
+        Path = $event.data.path.text
+        Line = $event.data.line_number
+      }
+    }
+  }
+```
+
+Prefer JSON, NUL-delimited records, CSV, or PowerShell objects. Parse display
+text only when the tool has no stable machine-readable format.
+
+## 3i. Sensitive Searches Without Secret Output
+
+Symptoms:
+
+- A search for a credential prints the credential into tool output or logs.
+- A token appears in a generated command line, process list, or error report.
+- Redaction happens after raw output has already crossed the trust boundary.
+
+Safer patterns:
+
+- Filter raw matches inside the same shell or script that runs the search.
+- Emit only path, line number, match type, status code, or other non-sensitive
+  metadata.
+- Do not print `rg --json` line text when the match may contain a secret.
+- Pass secrets through an appropriate secret store, protected stdin, or a
+  scoped environment variable rather than a command-line argument.
+- Redirect or sanitize debug output before invoking tools that echo headers,
+  request bodies, configuration files, or full matching lines.
+
+If exact match verification is required, compare a hash, length, or boolean in
+the trusted process and return only that result.
+
 ## 4. Windows To Remote Linux Quoting
 
 Symptoms:
@@ -487,20 +573,23 @@ printf '%s' "$password" | sudo bash -lc 'set -euo pipefail; source /etc/app.env;
 If the remote script has `trap` cleanup, write it as a local `.sh` file with LF
 line endings, upload it, then run `ssh my-host bash /tmp/script.sh`.
 
-## 4c. CRLF In Unix-Bound Payloads
+## 4c. Encoding And Line Endings In Unix-Bound Payloads
 
 Symptoms:
 
 - `command not found` where the command looks valid.
 - Error text includes a hidden carriage return such as `sort\r`.
 - Linux tools see paths or command names with a trailing `\r`.
+- A script begins with a BOM or arrives as UTF-16 instead of UTF-8.
+- Non-ASCII source text changes while crossing PowerShell, SSH, and bash.
 - `git apply`, `patch`, `sed`, `awk`, or a compiler rejects generated text
   that looked valid in PowerShell.
 
 Common cause:
 
 PowerShell generated a script, patch, stdin payload, or temporary file with
-Windows CRLF and sent it to a Unix or strict text tool unchanged.
+Windows CRLF, a BOM, or a version-dependent default encoding and sent it to a
+Unix or strict text tool unchanged.
 
 Safer patterns:
 
@@ -516,7 +605,9 @@ ssh my-host bash /tmp/script.sh
 ```
 
 Normalize line endings before piping or uploading scripts, patches, or other
-generated text for Unix tools.
+generated text for Unix tools. When exact bytes, control characters, or several
+text encodings are involved, base64-encode the payload, decode it in the target
+layer, and keep the encoded value out of logs if it contains secrets.
 
 ## 4d. Remote Search Regexes In Inline SSH
 
@@ -662,8 +753,10 @@ Use process-scoped policy for the command instead of asking the user to weaken t
 Symptoms:
 
 - `Cannot overwrite variable Host because it is read-only or constant.`
+- `Cannot overwrite variable PID because it is read-only or constant.`
 - A collection becomes a regex match table after `-match`.
-- Unexpected values appear in `$input`, `$error`, `$matches`, or `$host`.
+- Unexpected values appear in `$input`, `$error`, `$matches`, `$host`, or
+  `$PID`.
 
 Avoid using these names for ordinary variables:
 
@@ -671,8 +764,10 @@ Avoid using these names for ordinary variables:
 - `$Matches` / `$matches`
 - `$Input` / `$input`
 - `$Error` / `$error`
+- `$PID`
 
-Use specific names such as `$hostName`, `$hostPath`, `$matchRecords`, or `$inputText`.
+Use specific names such as `$hostName`, `$processId`, `$matchRecords`, or
+`$inputText`.
 
 ## 8a. Variables Followed By Punctuation
 
@@ -835,6 +930,54 @@ If the recorded root PID and listener owner differ, inspect the process tree
 before stopping anything. Cleanup should target the verified process or
 descendants, not a broad process-name filter.
 
+## 11b. Long-Running Remote Jobs And SSH Timeouts
+
+Symptoms:
+
+- A local SSH command times out while the remote build keeps running.
+- Retrying starts a second build because the first job was never checked.
+- The remote process survives, but its final exit code is lost.
+- A background command still holds the SSH session open.
+
+Common cause:
+
+The remote command was only suffixed with `&`, leaving stdin, stdout, or stderr
+attached to SSH. The local timeout then says nothing about remote completion.
+
+Safer pattern:
+
+```powershell
+$remoteScript = @'
+set -euo pipefail
+cd "$1"
+
+pid_file=.agent-build.pid
+
+if [ -f "$pid_file" ] && kill -0 "$(cat "$pid_file")" 2>/dev/null; then
+  printf 'already-running pid=%s\n' "$(cat "$pid_file")"
+  exit 0
+fi
+
+rm -f .agent-build.status
+nohup bash -c '
+  set +e
+  ./build.sh >.agent-build.log 2>&1
+  rc=$?
+  printf "%s\n" "$rc" >.agent-build.status.tmp
+  mv .agent-build.status.tmp .agent-build.status
+' </dev/null >/dev/null 2>&1 &
+
+printf '%s\n' "$!" >"$pid_file"
+printf 'started pid=%s\n' "$!"
+'@
+($remoteScript -replace "`r`n", "`n") | ssh my-host bash -s -- /srv/app
+```
+
+Probe the PID, status file, and log with a separate read-only command. Do not
+start another job until the prior PID is gone or the saved status proves it
+finished. A local timeout remains inconclusive unless the remote state is
+checked.
+
 ## 12. Wildcards And Pathspecs
 
 Symptoms:
@@ -851,6 +994,11 @@ Safer patterns:
 For delete, move, stop, deploy, or cleanup commands, first print the exact
 targets with the same filter logic. Keep enumeration and action in the same
 shell, and prefer `-LiteralPath` for PowerShell filesystem operations.
+
+`-LiteralPath` is not universal. Confirm the cmdlet's parameters with
+`Get-Command <cmdlet> -Syntax`; for example, `New-Item` accepts `-Path`, not
+`-LiteralPath`. Resolve and validate the parent directory first when a creation
+path contains wildcard characters.
 
 ## 13. OpenSSH Argument Parsing From PowerShell
 

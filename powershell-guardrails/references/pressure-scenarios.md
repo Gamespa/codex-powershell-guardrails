@@ -559,3 +559,89 @@ grep -RInE -- "$pattern" src | head -n 50
 '@
 ($remoteScript -replace "`r`n", "`n") | ssh my-host bash -s
 ```
+
+## Scenario 18. Search With No Matches
+
+Prompt:
+
+```text
+From PowerShell, search a repository and distinguish matches, no matches, and a real rg failure.
+```
+
+Common failing answer:
+
+```powershell
+rg -l -- 'optional-feature' .
+if ($LASTEXITCODE -ne 0) {
+  throw 'search failed'
+}
+```
+
+Why it fails:
+
+`rg` returns `1` for a successful search with no matches and `2` or greater for
+an error. Treating every nonzero code as failure turns an expected empty result
+into a false diagnostic.
+
+Passing answer:
+
+```powershell
+$tool = (Get-Command rg -ErrorAction Stop).Source
+& $tool -l -- 'optional-feature' .
+$searchExit = $LASTEXITCODE
+
+switch ($searchExit) {
+  0 { 'matches-found' }
+  1 { 'no-matches' }
+  default { throw "rg failed with exit code $searchExit" }
+}
+```
+
+## Scenario 19. Remote Build Outlives Local SSH Timeout
+
+Prompt:
+
+```text
+From Windows PowerShell, start a remote Linux build that may outlive the local command timeout and preserve its result.
+```
+
+Common failing answer:
+
+```powershell
+ssh my-host 'cd /srv/app && ./build.sh &'
+```
+
+Why it fails:
+
+Appending `&` does not detach the remote job's standard streams, so SSH may
+remain open. A local timeout then loses the final exit code and a retry can
+start a duplicate build.
+
+Passing answer:
+
+```powershell
+$remoteScript = @'
+set -euo pipefail
+cd /srv/app
+
+if [ -f .agent-build.pid ] && kill -0 "$(cat .agent-build.pid)" 2>/dev/null; then
+  printf 'already-running pid=%s\n' "$(cat .agent-build.pid)"
+  exit 0
+fi
+
+rm -f .agent-build.status
+nohup bash -c '
+  set +e
+  ./build.sh >.agent-build.log 2>&1
+  rc=$?
+  printf "%s\n" "$rc" >.agent-build.status.tmp
+  mv .agent-build.status.tmp .agent-build.status
+' </dev/null >/dev/null 2>&1 &
+
+printf '%s\n' "$!" >.agent-build.pid
+'@
+($remoteScript -replace "`r`n", "`n") | ssh my-host bash -s
+```
+
+Probe `.agent-build.pid`, `.agent-build.status`, and `.agent-build.log`
+separately before retrying or reporting success or failure.
