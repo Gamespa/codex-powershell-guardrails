@@ -83,10 +83,17 @@ Require-Text 'powershell-guardrails/SKILL.md' 'file metrics, line counts, or inv
 Require-Text 'powershell-guardrails/SKILL.md' 'empty stdout as ambiguous' 'empty native output guidance'
 Require-Text 'powershell-guardrails/SKILL.md' 'UTF-8 without a BOM' 'Unix-bound encoding guidance'
 Require-Text 'powershell-guardrails/SKILL.md' 'save the remote PID, log, and exit status' 'remote job state guidance'
+Require-Text 'powershell-guardrails/SKILL.md' '-NonInteractive' 'non-interactive child PowerShell guidance'
+Require-Text 'powershell-guardrails/SKILL.md' 'blocked by policy' 'host safety policy guidance'
+Require-Text 'powershell-guardrails/SKILL.md' 'EPIPE' 'local broken-pipe guidance'
 Require-Text 'powershell-guardrails/references/pitfalls.md' '& \$tool @args' 'argument-array safe pattern'
+Require-Text 'powershell-guardrails/references/pitfalls.md' `
+  '^## 1a\. Bare Child PowerShell In Automation$' 'automated child PowerShell pitfall'
 Require-Text 'powershell-guardrails/references/pitfalls.md' '^## 3d\. Member Access And Indexing In Nested Commands$' 'member/index nested command pitfall'
 Require-Text 'powershell-guardrails/references/pitfalls.md' '^## 3e\. Complex Local Inventory One-Liners$' 'complex local inventory pitfall'
 Require-Text 'powershell-guardrails/references/pitfalls.md' '^## 5a\. Native Batch Toolchain Boundaries$' 'cmd and batch toolchain boundary pitfall'
+Require-Text 'powershell-guardrails/references/pitfalls.md' `
+  '^## 7a\. Host Safety Policy Is Not Execution Policy$' 'host safety policy pitfall'
 Require-Text 'powershell-guardrails/references/pitfalls.md' '^## 8a\. Variables Followed By Punctuation$' 'variable punctuation pitfall'
 Require-Text 'powershell-guardrails/references/pitfalls.md' '^## 3g\. Empty Output And Native Search Exit Codes$' 'native search result pitfall'
 Require-Text 'powershell-guardrails/references/pitfalls.md' '^## 3h\. Parsing Human-Readable Native Output$' 'structured native output pitfall'
@@ -94,12 +101,16 @@ Require-Text 'powershell-guardrails/references/pitfalls.md' '^## 3i\. Sensitive 
 Require-Text 'powershell-guardrails/references/pitfalls.md' '\$PID' 'reserved PID guidance'
 Require-Text 'powershell-guardrails/references/pitfalls.md' `
   '^## 11b\. Long-Running Remote Jobs And SSH Timeouts$' 'remote job timeout pitfall'
+Require-Text 'powershell-guardrails/references/pitfalls.md' `
+  '^## 11c\. Local Batch Timeouts And Closed Pipes$' 'local batch broken-pipe pitfall'
 Require-Text 'powershell-guardrails/references/pressure-scenarios.md' '^## Scenario 11\. Variable Followed By Colon$' 'variable colon pressure scenario'
 Require-Text 'powershell-guardrails/references/pressure-scenarios.md' '^## Scenario 12\. API Request With Token And JSON$' 'API request pressure scenario'
 Require-Text 'powershell-guardrails/references/pressure-scenarios.md' '^## Scenario 13\. Native Batch Toolchain Setup$' 'native batch toolchain pressure scenario'
 Require-Text 'powershell-guardrails/references/pressure-scenarios.md' '^## Scenario 15\. Recursive File Inventory$' 'recursive file inventory pressure scenario'
 Require-Text 'powershell-guardrails/references/pressure-scenarios.md' '^## Scenario 18\. Search With No Matches$' 'native search exit-code scenario'
 Require-Text 'powershell-guardrails/references/pressure-scenarios.md' '^## Scenario 19\. Remote Build Outlives Local SSH Timeout$' 'remote job timeout scenario'
+Require-Text 'powershell-guardrails/references/pressure-scenarios.md' `
+  '^## Scenario 20\. Non-Interactive Child PowerShell$' 'non-interactive child PowerShell scenario'
 Require-Text 'README.md' 'scripts[\\/]verify-skill\.ps1' 'verification command'
 Require-Text 'README.md' 'scripts[\\/]verify-pressure-scenarios\.ps1' 'pressure-scenario verification command'
 Require-Text 'README.md' 'scripts[\\/]verify\.ps1' 'full verification command'

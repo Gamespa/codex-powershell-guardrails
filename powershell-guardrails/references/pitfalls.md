@@ -20,6 +20,41 @@ pwsh -NoProfile -Command '$PSVersionTable.PSVersion'
 Use `pwsh` explicitly when you need PowerShell 7 behavior. Use `powershell`
 only when you intentionally need Windows PowerShell.
 
+## 1a. Bare Child PowerShell In Automation
+
+Symptoms:
+
+- A generator hangs with an idle `powershell.exe` child and no descendants.
+- A publisher-trust prompt or interactive prompt consumes commands intended
+  for the child shell.
+- Generated files are empty or partial even though the parent exits with `0`.
+
+Common causes:
+
+- A batch file or generator starts `powershell.exe` or `pwsh` without an
+  explicit command or script.
+- The child inherits redirected stdin and waits at an interactive prompt.
+- A discovered `.ps1` package wrapper consumes stdin that contained later
+  commands such as the next generator step or `exit`.
+
+Safer pattern:
+
+```powershell
+$pwsh = (Get-Command pwsh -ErrorAction Stop).Source
+& $pwsh -NoLogo -NoProfile -NonInteractive -File .\generate-schema.ps1
+if ($LASTEXITCODE -ne 0) { throw 'schema generation failed' }
+
+$output = Get-Item -LiteralPath .\out\schema.js -ErrorAction Stop
+if ($output.Length -eq 0) { throw 'schema output is empty' }
+```
+
+Validate generated content with its real parser or loader when possible. A
+nonempty file can still be truncated or structurally incomplete.
+
+When a package exposes both `.cmd` and `.ps1` entry points, invoke the intended
+`.cmd` directly if a PowerShell wrapper would share or consume generator stdin.
+Do not use parent exit code alone as proof that every child step completed.
+
 ## 2. Bash Syntax In PowerShell
 
 Symptoms:
@@ -748,6 +783,29 @@ pwsh -NoProfile -ExecutionPolicy Bypass -File .\scripts\check.ps1
 
 Use process-scoped policy for the command instead of asking the user to weaken the machine policy.
 
+## 7a. Host Safety Policy Is Not Execution Policy
+
+Symptoms:
+
+- The command runner reports `blocked by policy` or `rejected` before
+  PowerShell executes the command.
+- Adding `-ExecutionPolicy Bypass` changes nothing.
+- Rewriting the same deletion with arrays, another shell, or alternate APIs is
+  also rejected.
+
+These are host safety decisions, not PowerShell script execution policy.
+
+Safer pattern:
+
+- Stop retrying semantically equivalent destructive commands.
+- Prove exact targets with a read-only command, then use a supported operation
+  with literal targets if one is available.
+- Use `apply_patch` for scoped text-file changes when appropriate.
+- If no allowed operation exists, leave the artifact in place and report it.
+
+Do not switch shells, hide the target, or call lower-level filesystem APIs to
+evade the host policy.
+
 ## 8. Reserved And Automatic Variables
 
 Symptoms:
@@ -977,6 +1035,39 @@ Probe the PID, status file, and log with a separate read-only command. Do not
 start another job until the prior PID is gone or the saved status proves it
 finished. A local timeout remains inconclusive unless the remote state is
 checked.
+
+## 11c. Local Batch Timeouts And Closed Pipes
+
+Symptoms:
+
+- A finite generator or indexer reaches the command timeout and reports
+  `EPIPE`, broken pipe, or that the pipe is being closed.
+- The producer reports a pipe error after the downstream tool rejects its
+  input or exits early.
+- A child process or partially written output remains after the command runner
+  has returned.
+
+Common causes:
+
+- The command runner closes its output capture pipe at timeout while the native
+  process is still writing.
+- The downstream CLI does not accept stdin, rejects `-`, or fails before
+  consuming all producer output.
+- A retry begins before the prior process tree or output state is checked.
+
+Safer pattern:
+
+- Confirm from `--help` or documentation that the downstream tool accepts
+  stdin before building a native pipeline.
+- When both native exit codes matter, use the producer's output-file option or
+  a temporary file handoff instead of an opaque pipeline.
+- After timeout, inspect the recorded root process and descendants, then check
+  logs and output timestamps, sizes, and structure.
+- Do not retry until the prior process is gone or its persisted state proves
+  completion.
+
+A producer-side broken-pipe message can be secondary evidence of downstream or
+transport failure. It does not identify the root cause by itself.
 
 ## 12. Wildcards And Pathspecs
 

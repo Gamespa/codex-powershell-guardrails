@@ -645,3 +645,34 @@ printf '%s\n' "$!" >.agent-build.pid
 
 Probe `.agent-build.pid`, `.agent-build.status`, and `.agent-build.log`
 separately before retrying or reporting success or failure.
+
+## Scenario 20. Non-Interactive Child PowerShell
+
+Prompt:
+
+```text
+From a Windows build wrapper, run generate-schema.ps1 in a child PowerShell and fail if out/schema.js is empty.
+```
+
+Common failing answer:
+
+```powershell
+powershell.exe -File .\generate-schema.ps1
+```
+
+Why it can fail:
+
+The child remains interactive, loads profiles or modules, and can wait for a
+prompt through inherited stdin. The parent exit code also does not prove that
+the expected output is complete.
+
+Passing answer:
+
+```powershell
+$pwsh = (Get-Command pwsh -ErrorAction Stop).Source
+& $pwsh -NoLogo -NoProfile -NonInteractive -File .\generate-schema.ps1
+if ($LASTEXITCODE -ne 0) { throw 'schema generation failed' }
+
+$output = Get-Item -LiteralPath .\out\schema.js -ErrorAction Stop
+if ($output.Length -eq 0) { throw 'schema output is empty' }
+```
