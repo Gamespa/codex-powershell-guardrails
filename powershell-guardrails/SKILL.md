@@ -60,32 +60,38 @@ If time is short, apply these first:
    child shell.
 2. Put nested PowerShell payloads containing `$`, `$_`, `$input`, or `$()` in
    single quotes, a script file, or a here-string.
-3. Send remote Linux work through `ssh <host> bash -s` with an LF-normalized
+3. Before piping output from `foreach`, `if`, or another statement, wrap it as
+   `& { ... } | ...`.
+4. In validation scripts, make unexpected PowerShell errors terminating with
+   `$ErrorActionPreference = 'Stop'` or `-ErrorAction Stop`; verify the expected
+   result. A completed command can still contain a nonterminating error.
+5. Send remote Linux work through `ssh <host> bash -s` with an LF-normalized
    script instead of adding quote layers.
-4. Verify native tools with `Get-Command`, `where.exe`, and a version probe
+6. Verify native tools with `Get-Command`, `where.exe`, and a version probe
    before diagnosing project behavior.
-5. Before delete, move, stop, deploy, or other destructive commands, prove the
+7. Before delete, move, stop, deploy, or other destructive commands, prove the
    target set with a read-only command.
-6. For local long-running services, split launch, readiness probe, listener
+8. For local long-running services, split launch, readiness probe, listener
    check, and cleanup. Record the root PID.
-7. For API headers, tokens, JSON bodies, or many endpoint probes, use a script
+9. For API headers, tokens, JSON bodies, or many endpoint probes, use a script
    file or structured serializer.
-8. If interpolation puts punctuation after a variable, use `${name}` or
+10. If interpolation puts punctuation after a variable, use `${name}` or
    `'{0}: {1}' -f $name, $value`.
-9. For file metrics, line counts, or inventory reports, use `rg --files`,
+11. For file metrics, line counts, or inventory reports, use `rg --files`,
    `git ls-files`, a `.ps1` file, or a structured runtime after the first
    nested PowerShell parse failure.
-10. If a native command needs success/failure branching, keep the branch in the
+12. If a native command needs success/failure branching, keep the branch in the
     same script file or script block.
-11. Treat empty stdout as ambiguous until the command's exit code and stderr
+13. Treat empty stdout as ambiguous until the command's exit code and stderr
     prove whether it succeeded, found nothing, or failed.
-12. For sensitive searches, emit only sanitized metadata such as path, line,
+14. For sensitive searches, emit only sanitized metadata such as path, line,
     and match type. Do not print the matched value.
-13. For remote long-running jobs, save the remote PID, log, and exit status;
+15. For remote long-running jobs, save the remote PID, log, and exit status;
     check them before retrying after a local timeout.
-14. Treat host `blocked by policy` or `rejected` errors as safety boundaries,
-    not PowerShell execution-policy errors. Do not disguise or bypass them.
-15. After a local batch timeout or broken pipe, inspect descendants and
+16. On a host `blocked by policy` or `rejected` error, stop retrying the same
+    operation with different syntax, paths, shells, or APIs. This is not a
+    PowerShell execution-policy error.
+17. After a local batch timeout or broken pipe, inspect descendants and
     validate persisted outputs before reporting failure, success, or retrying.
 
 ## Guardrails
@@ -113,6 +119,13 @@ If time is short, apply these first:
   single-quoted here-string, temporary script, stdin, file, serializer, or
   `apply_patch`. Send Unix-bound text as LF and UTF-8 without a BOM; use base64
   when exact bytes or control characters must survive multiple parser layers.
+  Keep each embedded language in its own payload with a closing here-string
+  marker on its own line.
+- **PowerShell command outcomes:** PowerShell cmdlet errors can be
+  nonterminating even when the command runner reports completion. In probes and
+  validation scripts, make unexpected errors terminating and check the
+  expected object or artifact before reporting success. Check `$LASTEXITCODE`
+  separately for native commands.
 - **Native command outcomes:** Know tool-specific exit codes. Empty output is
   not proof of no data; capture stderr and distinguish no match from failure.
 - **Structured native output:** Prefer JSON, NUL-delimited output, or objects
@@ -123,8 +136,9 @@ If time is short, apply these first:
   in one shell with `-LiteralPath` where supported or native pathspec arguments.
 - **Host safety policy:** Distinguish `PSSecurityException` from host
   `blocked by policy` or `rejected` errors. Process-scoped
-  `-ExecutionPolicy Bypass` applies only to the former. Do not switch shells,
-  obscure commands, or use alternate APIs to evade host policy.
+  `-ExecutionPolicy Bypass` applies only to the former. After a host rejection,
+  do not retry the same operation by switching shells, changing command shape,
+  obscuring targets, or using alternate APIs.
 - **Local service startup:** Treat foreground timeout as inconclusive. Probe
   health, listener PID, and logs separately.
 - **Local finite jobs:** Treat a timeout, `EPIPE`, or broken pipe as
@@ -209,6 +223,10 @@ pwsh -NoProfile -ExecutionPolicy Bypass -File .\scripts\verify.ps1
   second read-only check.
 - Assuming `pnpm`, `rg`, `node`, `curl`, or another native tool resolves to the
   executable you intended.
+- Treating a completed command or zero process exit as success after a
+  nonterminating PowerShell error.
+- Combining several embedded languages in one here-string or placing its
+  closing marker after other code on the same line.
 - Using `$PID` as a scratch variable even though PowerShell reserves it.
 - Assuming every filesystem cmdlet supports `-LiteralPath`; `New-Item` uses
   `-Path`.
@@ -217,8 +235,9 @@ pwsh -NoProfile -ExecutionPolicy Bypass -File .\scripts\verify.ps1
 
 Read `references/pitfalls.md` for concrete symptoms, causes, and replacements,
 especially for variable-boundary, API requests, automated child shells, host
-policy rejection, broken pipes, native batch setup, recursive inventory,
-local services, cleanup, SSH, and quoting failures.
+policy rejection, nonterminating errors, embedded scripts, broken pipes, native
+batch setup, recursive inventory, local services, cleanup, SSH, and quoting
+failures.
 
 Use `references/pressure-scenarios.md` before changing this skill's rules. Run
 `scripts/verify.ps1` after editing those scenarios.

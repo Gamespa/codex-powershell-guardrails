@@ -271,6 +271,26 @@ Safer patterns:
 - In a `.ps1` file, put the `param` block before setup statements,
   assignments, or output-emitting lines.
 
+When a command creates scripts in more than one language, keep each payload
+separate. A single-quoted here-string starts with `@'` and ends with `'@` alone
+on its own line; code after a missing or misplaced marker is parsed as
+PowerShell:
+
+```powershell
+$pythonCode = @'
+print('ready')
+'@
+$luaCode = @'
+print('ready')
+'@
+Set-Content -LiteralPath .\check.py -Value $pythonCode -Encoding utf8
+Set-Content -LiteralPath .\check.lua -Value $luaCode -Encoding utf8
+```
+
+Run each file with its intended interpreter and check that interpreter's exit
+code. Use `apply_patch` for tracked script files instead of generating them
+through another shell when possible.
+
 ```powershell
 param(
   [string]$Token,
@@ -500,6 +520,33 @@ Safer patterns:
 
 If exact match verification is required, compare a hash, length, or boolean in
 the trusted process and return only that result.
+
+## 3j. Nonterminating PowerShell Errors Masquerade As Completion
+
+Symptoms:
+
+- The command runner says it completed, but output contains `WriteError`,
+  `Get-Content`, or another cmdlet error.
+- A failed assignment to `$PID` leaves the automatic current-process ID in
+  place, so a later process check can falsely report `running=True`.
+- A missing input file produces an error and later statements still print a
+  success-looking status.
+
+Safer pattern for a probe where errors are unexpected:
+
+```powershell
+$ErrorActionPreference = 'Stop'
+$processId = [int](Get-Content -LiteralPath .\run\service.pid -Raw -ErrorAction Stop)
+if ($processId -le 0) { throw 'Invalid process ID' }
+$process = Get-Process -Id $processId -ErrorAction SilentlyContinue
+[pscustomobject]@{ ProcessId = $processId; Running = [bool]$process }
+```
+
+`SilentlyContinue` is limited here to the expected case where that process no
+longer exists. Keep input reads and conversions terminating. A tool-level
+`Script completed` message or zero process exit does not prove every
+PowerShell statement succeeded. For native executables, inspect
+`$LASTEXITCODE` separately.
 
 ## 4. Windows To Remote Linux Quoting
 
@@ -797,7 +844,8 @@ These are host safety decisions, not PowerShell script execution policy.
 
 Safer pattern:
 
-- Stop retrying semantically equivalent destructive commands.
+- Stop retrying semantically equivalent destructive commands after the first
+  host rejection, even if the syntax or shell could be changed.
 - Prove exact targets with a read-only command, then use a supported operation
   with literal targets if one is available.
 - Use `apply_patch` for scoped text-file changes when appropriate.
