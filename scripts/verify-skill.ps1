@@ -6,6 +6,7 @@ $skillRoot = Join-Path $repoRoot 'powershell-guardrails'
 $skillPath = Join-Path $skillRoot 'SKILL.md'
 $requiredFiles = @('README.md', 'LICENSE', '.gitattributes', 'powershell-guardrails/SKILL.md',
   'powershell-guardrails/agents/openai.yaml',
+  'powershell-guardrails/scripts/check-runtime.ps1',
   'powershell-guardrails/references/arguments-and-expansion.md',
   'powershell-guardrails/references/ssh-and-encoding.md',
   'powershell-guardrails/references/execution-and-lifecycle.md',
@@ -71,7 +72,9 @@ foreach ($document in $documents) {
     if ($parseErrors.Count -gt 0) { throw "Invalid PowerShell example in $($document.Name): $($parseErrors[0].Message)" }
   }
 }
-foreach ($scriptFile in Get-ChildItem -LiteralPath (Join-Path $repoRoot 'scripts') -Filter '*.ps1' -File) {
+$scriptFiles = @(Get-ChildItem -LiteralPath (Join-Path $repoRoot 'scripts') -Filter '*.ps1' -File) +
+  @(Get-ChildItem -LiteralPath (Join-Path $skillRoot 'scripts') -Filter '*.ps1' -File)
+foreach ($scriptFile in $scriptFiles) {
   $parseTokens = $null
   $parseErrors = $null
   $null = [Management.Automation.Language.Parser]::ParseFile($scriptFile.FullName, [ref]$parseTokens, [ref]$parseErrors)

@@ -2,8 +2,9 @@
 
 ## Command outcomes
 
-`$ErrorActionPreference = 'Stop'` handles unexpected cmdlet errors, not every
-native nonzero exit. Capture native status before another native command
+`$ErrorActionPreference = 'Stop'` handles unexpected cmdlet errors. Native
+nonzero exits also follow it when `$PSNativeCommandUseErrorActionPreference`
+is enabled. Capture native status before another native command
 overwrites it. In scripts, throw or exit explicitly on failure:
 
 ```powershell
@@ -13,15 +14,20 @@ $diffExit = $LASTEXITCODE
 if ($diffExit -ne 0) { throw "Diff check failed: $diffExit" }
 ```
 
-Search statuses have a distinct no-data outcome:
+Search statuses have a distinct no-data outcome. Locally disable automatic
+native errors when a tool uses nonzero status for expected outcomes, then
+interpret its exit-code contract explicitly. Do not change the session globally:
 
 ```powershell
-rg -l -- 'optional-feature' .
-$searchExit = $LASTEXITCODE
-switch ($searchExit) {
-  0 { 'matches-found' }
-  1 { 'no-matches' }
-  default { throw "rg failed with exit code $searchExit" }
+& {
+  $PSNativeCommandUseErrorActionPreference = $false
+  rg -l -- 'optional-feature' .
+  $searchExit = $LASTEXITCODE
+  switch ($searchExit) {
+    0 { 'matches-found' }
+    1 { 'no-matches' }
+    default { throw "rg failed with exit code $searchExit" }
+  }
 }
 ```
 
@@ -36,29 +42,27 @@ Prefer machine-readable native output. Splitting `path:line:text` on `:` breaks
 drive-letter paths and timestamps. `rg --json` has path and line fields, but
 also contains raw matches; sanitize inside the producing process when sensitive.
 
+## Structured output
+
+Keep original objects until serialization. `Format-Table` and `Format-List`
+emit formatting records, so do not feed them into JSON/CSV or business logic.
+Functions emit every uncaptured success-stream value, including values before
+`return`; suppress incidental output when returning a structured result.
+
+Wrap zero/one/many results in `@(...)` when downstream code requires an array.
+Use `ConvertTo-Json -InputObject @($items)` to preserve an array's shape, and
+choose `-Depth` to cover the actual nested structure (the default is 2).
+Use `ConvertFrom-Json -NoEnumerate` for a one-element JSON array round trip.
+Read JSON text with `Get-Content -LiteralPath $path -Raw` before parsing.
+
 ## Sensitive data
 
 Keep credentials out of command-line arguments, including positional arguments
 to `ssh ... bash -s --`. Quoting or base64 does not hide process arguments.
 
-Build API headers in the process and keep credentials out of command arguments,
-request debug output, and unsanitized errors:
-
-```powershell
-if (-not $env:APP_API_TOKEN) { throw 'API token is unavailable' }
-$headers = @{ Authorization = 'Bearer ' + $env:APP_API_TOKEN }
-$body = [pscustomobject]@{ state = 'ready' } | ConvertTo-Json
-try {
-  $null = Invoke-RestMethod -Method Post -Uri $env:APP_API_URI -Headers $headers `
-    -Body $body -ContentType 'application/json' -ErrorAction Stop
-  'request-completed'
-} catch {
-  throw 'API request failed; inspect sanitized diagnostics'
-}
-```
-
-A scoped environment variable is one input option, not a general secret store.
-Avoid persisting tokens in temporary scripts or user profiles.
+Build authentication headers in the process. Keep credentials out of request
+debug output and unsanitized errors. A scoped environment variable is one input
+option, not a secret store; avoid persisting tokens in scripts or profiles.
 
 For remote secrets, use the application's documented secret-store or protected
 stdin protocol. Do not assume `sudo` consumes an application password. Do not
@@ -69,16 +73,19 @@ For credential searches, `rg -l` can return filenames only. For line numbers,
 filter JSON records before the outer command runner sees output:
 
 ```powershell
-$results = rg --json -- 'api_token' .\fixtures
-$searchExit = $LASTEXITCODE
-if ($searchExit -gt 1) { throw 'Credential search failed' }
-foreach ($record in $results) {
-  $event = $record | ConvertFrom-Json
-  if ($event.type -eq 'match') {
-    [pscustomobject]@{
-      Path = $event.data.path.text
-      Line = $event.data.line_number
-      MatchType = 'credential-marker'
+& {
+  $PSNativeCommandUseErrorActionPreference = $false
+  $results = rg --json -- 'api_token' .\fixtures
+  $searchExit = $LASTEXITCODE
+  if ($searchExit -notin @(0, 1)) { throw 'Credential search failed' }
+  foreach ($record in $results) {
+    $event = $record | ConvertFrom-Json
+    if ($event.type -eq 'match') {
+      [pscustomobject]@{
+        Path = $event.data.path.text
+        Line = $event.data.line_number
+        MatchType = 'credential-marker'
+      }
     }
   }
 }
@@ -128,14 +135,10 @@ when it fits the input contract. Validate child exit and artifacts.
 
 ### Remote jobs
 
-Keep and poll an attached SSH session if its lifetime is sufficient. For jobs
-that must survive disconnect, use a remote scheduler or detach all three
-standard streams. Persist unique job identity, PID, log, and final exit status;
-publish status atomically when practical.
-
-Inspect existing state before relaunching. `kill -0` proves only that a PID
-exists, not ownership. Fixed PID filenames and check-then-launch do not prevent
-concurrent duplicate jobs; use a lock or scheduler when concurrency is possible.
+Poll an attached SSH session when sufficient. To survive disconnect, use a
+scheduler or detach stdin/stdout/stderr, retaining unique job identity, logs,
+and final exit status. Inspect prior state before retrying; `kill -0` does not
+prove ownership. Use a lock or scheduler when concurrent launch is possible.
 
 ## Windows-specific diagnostics
 
@@ -145,11 +148,13 @@ concurrent duplicate jobs; use a lock or scheduler when concurrency is possible.
 - **Execution policy:** A local `PSSecurityException` differs from host denial.
   Process-scoped `-ExecutionPolicy Bypass` can address local policy for a trusted,
   authorized script; it cannot override Group Policy or host restrictions.
-- **curl / Schannel:** Windows PowerShell 5.1 may alias `curl`; use `curl.exe`
-  for the native binary. Cross-check a Schannel failure with another client or
+- **curl / Schannel:** Use `curl.exe` when command resolution is ambiguous.
+  Cross-check a Schannel failure with another client or
   logs before declaring an outage; retain native and HTTP status separately.
 
 
-## Source
+## Sources
 
 - [PowerShell execution policies](https://learn.microsoft.com/en-us/powershell/module/microsoft.powershell.core/about/about_execution_policies)
+- [Native error preferences](https://learn.microsoft.com/en-us/powershell/module/microsoft.powershell.core/about/about_preference_variables#psnativecommanduseerroractionpreference)
+- [JSON serialization](https://learn.microsoft.com/en-us/powershell/module/microsoft.powershell.utility/convertto-json)

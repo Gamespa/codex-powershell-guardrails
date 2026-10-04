@@ -4,13 +4,13 @@
     "shouldTrigger": true,
     "language": "powershell",
     "prompt": "From an outer PowerShell shell, fix: pwsh -Command \"Get-ChildItem -File | ForEach-Object { $_.FullName }\". Return filenames without outer expansion.",
-    "expectedOutcome": "No lost $_; current-shell execution or a literal explicit child payload is accepted."
+    "expectedOutcome": "No lost $_; current-shell execution or a literal explicit child payload is accepted. Child PowerShell uses the checked installation under PSHOME rather than resolving a new pwsh through PATH."
   },
   {
     "id": "modern_native_quotes",
     "shouldTrigger": true,
     "language": "powershell",
-    "prompt": "On Windows PowerShell 7.3+ in Windows native argument mode, pass an empty string and a literal a\"b as separate arguments to a native argument-echo executable. Diagnose why a legacy workaround may change them.",
+    "prompt": "On Windows with pwsh 7.6.x in Windows native argument mode, pass an empty string and a literal a\"b as separate arguments to a native argument-echo executable. Diagnose why a legacy workaround may change them.",
     "expectedOutcome": "Preserve empty/quoted arguments; account for native argument mode, not just arrays or indiscriminate --%."
   },
   {
@@ -31,8 +31,8 @@
     "id": "unicode_ssh",
     "shouldTrigger": true,
     "language": "powershell",
-    "prompt": "From Windows PowerShell 5.1, send a Bash script containing Chinese text and remote $(id -un) via SSH. Preserve variables, LF, and UTF-8 without BOM.",
-    "expectedOutcome": "Literal remote payload; explicit native stdin encoding or correctly encoded uploaded file; LF alone insufficient."
+    "prompt": "From pwsh 7.6.x on Windows, send a Bash script containing Chinese text and remote $(id -un) via SSH. Preserve variables and exact LF UTF-8 bytes without a BOM or an appended CRLF.",
+    "expectedOutcome": "Literal remote payload; exact UTF-8 byte stdin or correctly encoded uploaded file; an LF-normalized string pipeline alone is insufficient."
   },
   {
     "id": "cmdlet_failure",
@@ -59,7 +59,7 @@
     "id": "ordinary_rg",
     "shouldTrigger": false,
     "language": "powershell",
-    "prompt": "In a single PowerShell 7 shell, search ./fixtures for alpha or beta using rg. No quoting error or native resolution issue is present.",
+    "prompt": "In a single pwsh 7.6.x shell on Windows, search ./fixtures for alpha or beta using rg. No quoting error or native resolution issue is present.",
     "expectedOutcome": "One ordinary quoted regex command suffices; no mandatory Get-Command/where/version or nested shell."
   },
   {
@@ -75,6 +75,48 @@
     "language": "powershell",
     "prompt": "List Markdown filenames in the current directory using ordinary PowerShell. No child shell or error is involved.",
     "expectedOutcome": "Direct Get-ChildItem pipeline; do not require a temporary script or native version probes."
+  },
+  {
+    "id": "native_error_preference",
+    "shouldTrigger": true,
+    "language": "powershell",
+    "prompt": "On Windows with pwsh 7.6.x, ErrorActionPreference is Stop and PSNativeCommandUseErrorActionPreference is true. Search for an optional marker with rg; distinguish no match from actual errors and preserve the caller's preferences.",
+    "expectedOutcome": "Scoped native error preference override permits status capture; rg 1 is no match and unexpected codes fail; caller preference remains unchanged."
+  },
+  {
+    "id": "binary_redirection",
+    "shouldTrigger": true,
+    "language": "powershell",
+    "prompt": "On Windows with pwsh 7.6.x, a provisioned native exporter writes a binary archive to stdout. Save exact bytes to archive.bin, with diagnostics in a separate stderr file and checked exit status.",
+    "expectedOutcome": "Direct native stdout redirection or a binary-safe stream; no text cmdlet or stderr merge in the binary path; immediate native exit check."
+  },
+  {
+    "id": "structured_output",
+    "shouldTrigger": true,
+    "language": "powershell",
+    "prompt": "On Windows with pwsh 7.6.x, serialize zero, one, or many report objects as a JSON array. Each item has nested fields four levels deep. A previous Format-Table pipeline produced formatting metadata instead of the reports.",
+    "expectedOutcome": "Serialize original objects with a stable array shape and sufficient depth, without Format-Table; no fixed depth unrelated to the structure."
+  },
+  {
+    "id": "literal_bracket_path",
+    "shouldTrigger": true,
+    "language": "powershell",
+    "prompt": "On Windows with pwsh 7.6.x, read report[1].txt literally. Check whether that path or fallback.txt exists; an earlier Test-Path expression complained about a parameter named or.",
+    "expectedOutcome": "Use LiteralPath and group the cmdlet calls before combining their Boolean results with -or."
+  },
+  {
+    "id": "unsupported_runtime",
+    "shouldTrigger": true,
+    "language": "none",
+    "prompt": "Use powershell-guardrails to repair and execute a fragile command. The only available runtime is Windows PowerShell 5.1. Follow the candidate's declared runtime requirement.",
+    "expectedOutcome": "Updated candidate reports unsupported runtime and stops; no automatic installation, upgrade, or executing repaired tasks under 5.1."
+  },
+  {
+    "id": "newer_runtime",
+    "shouldTrigger": true,
+    "language": "none",
+    "prompt": "Use powershell-guardrails to repair and execute a fragile command. The only available runtime is pwsh 7.7 on Windows. Follow the candidate's declared runtime requirement.",
+    "expectedOutcome": "Updated candidate treats the 7.6.x requirement as an exact minor-version boundary, reports unsupported 7.7, and stops without changing machine configuration."
   },
   {
     "id": "pure_bash",

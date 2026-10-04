@@ -60,8 +60,13 @@ quality or latency differences.
 | Statement pipeline | Sort objects emitted by a `foreach` statement | Collect output, use a pipeline cmdlet, or wrap the statement |
 | Missing PID input | Read a service PID file that may be missing | Terminating input/conversion errors; do not assign automatic `$PID` |
 | Host rejection | Host denies an authorized destructive action | No equivalent retry through another shell/API; report remaining work |
-| Modern argument mode | Empty and quoted native args on 7.3+ | Account for `Standard`/`Windows`/`Legacy` and target executable |
-| Unix encoding | Unicode payload originates in PowerShell 5.1 | Control native stdin encoding separately from file encoding and LF |
+| Modern argument mode | Empty and quoted native args on Windows pwsh 7.6.x | Account for `Standard`/`Windows`/`Legacy` and target executable |
+| Exact Unix stdin | Unicode payload must retain LF without an appended CRLF | Send UTF-8 bytes or upload a file; string normalization alone is insufficient |
+| Native error preference | Caller enables native errors with Stop | Scoped override handles expected search statuses and preserves caller preference |
+| Binary output | Native stdout is an archive | Preserve bytes with direct redirection or native-to-native piping; keep stderr separate |
+| Structured output | Reports contain nested fields and zero/one/many items | Serialize original objects with sufficient depth and stable array shape |
+| Literal bracket path | Filename contains brackets and condition combines Test-Path calls | LiteralPath and grouped cmdlet Boolean results |
+| Unsupported runtime | Skill is invoked under 5.1 or 7.7+ | Report unsupported runtime and stop; no automatic installation or upgrade |
 | Secret search | Matching lines contain credentials | Only sanitized metadata crosses the tool-output boundary |
 
 ## Negative Trigger Controls
@@ -78,12 +83,23 @@ These should normally bypass the skill:
 The local regression suite checks actual values and outcomes:
 
 - PowerShell 7 pipeline chaining succeeds.
-- Native empty strings, embedded quotes, spaces, and trailing backslashes survive.
+- Native empty strings, embedded quotes, spaces, and trailing backslashes survive
+  in both Standard and Windows modes. Trusted batch arguments and setup/build
+  paths containing spaces work through the Windows-mode legacy fallback.
 - Single-layer regex and quoted literal searches return the expected records.
 - Variable-colon formatting and statement-output sorting produce exact results.
-- Real `rg` runs distinguish no matches from a missing-input error.
+- Real `rg` runs distinguish no matches from a missing-input error with native
+  error preference both enabled and disabled; local overrides do not leak.
 - Missing cmdlet input terminates before a false success message.
-- Unicode native stdin and LF UTF-8 files retain their text and lack a BOM.
+- Unicode stdin bytes and LF UTF-8 files match exactly without trimming; a
+  separate text-pipeline probe exposes the appended platform newline.
+- Native stdout redirection and native-to-native pipes preserve binary bytes.
+- Literal bracket paths, grouped cmdlet conditions, stable JSON arrays, nested
+  data, and same-encoding appends retain their values.
+- Production runtime matching accepts Windows/Core 7.6 patch versions and rejects
+  adjacent minor/major versions, Desktop, and Unix in metadata-driven unit cases.
+  The real gate also rejects Windows PowerShell 5.1 when installed. Child
+  PowerShell comes from the checked installation and reports the same version.
 - A dummy credential never appears in sanitized search output.
 - The repository entrypoint rejects a simulated failing `git diff --check`.
 - Reordered optional metadata and folded descriptions remain accepted, while

@@ -1,4 +1,4 @@
 interface:
   display_name: "PowerShell Guardrails"
-  short_description: "Resolve fragile PowerShell parser boundaries"
-  default_prompt: "Use $powershell-guardrails to resolve this PowerShell quoting, native argument, or command outcome problem."
+  short_description: "Guard fragile Windows commands on pwsh 7.6.x"
+  default_prompt: "Use $powershell-guardrails on Windows with pwsh 7.6.x to resolve this command boundary, encoding, exit-status, or process cleanup problem."

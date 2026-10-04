@@ -1,27 +1,12 @@
 # Arguments and Expansion
 
-## Versions and native arguments
-
-`powershell.exe` normally means Windows PowerShell 5.1; `pwsh` means PowerShell
-7. Inspect `$PSVersionTable.PSVersion` only when the distinction matters.
-
-| Behavior | Windows PowerShell 5.1 | PowerShell 7 |
-| --- | --- | --- |
-| `&&` and `||` pipeline chains | Unsupported | Supported |
-| Bash heredocs, `NAME=value command` | Unsupported | Unsupported |
-| Default native argument passing | Legacy | Configurable from 7.3 |
-
-PowerShell 7 pipeline chains operate on pipelines, not arbitrary statements.
-Use an `if` block when an assignment or control-flow statement makes a chain
-unclear. PowerShell's `$()` is a subexpression, not Bash command substitution.
-
-### Native arguments from PowerShell 7.3
+## Native arguments
 
 `$PSNativeCommandArgumentPassing` can be `Legacy`, `Standard`, or `Windows`.
 `Standard` preserves embedded quotes and empty arguments. Windows defaults to
 `Windows`, which uses legacy passing for `cmd.exe`, `.cmd`, `.bat`, and some
-script hosts. Earlier PowerShell versions and explicit `Legacy` need different
-handling. Do not change this preference globally to repair one invocation.
+script hosts. Explicit `Legacy` needs different handling.
+Do not change this preference globally to repair one invocation.
 
 An argument array keeps logical arguments separate, but does not override
 native passing mode or a downstream parser:
@@ -35,12 +20,11 @@ A bound string containing `|` is already safe in a simple PowerShell invocation.
 For a quote-sensitive tool, verify received arguments with a harmless
 argument-echo probe in the affected mode, rather than adding escaping blindly.
 
-`--%` is an escape hatch for native Windows commands, especially legacy empty
-arguments. It stops parsing through the newline or pipe, still expands `%ENV%`,
-and prevents normal `$variable` expansion. Do not recommend it automatically
-for modern native executables.
+Reserve `--%` for a fixed native command that requires it. It stops parsing
+through a newline or pipe, still expands `%ENV%`, and prevents `$variable`
+expansion; prefer direct arguments for modern executables.
 
-### Batch setup and environment
+## Batch setup and environment
 
 A `.bat` setup script changes its child `cmd.exe` environment, not its parent
 PowerShell environment. Run the dependent native build in that same child:
@@ -76,7 +60,8 @@ For automated child PowerShell, use an explicit payload and
 `-NoLogo -NoProfile -NonInteractive`. Do not launch a bare interactive shell:
 
 ```powershell
-pwsh -NoLogo -NoProfile -NonInteractive -Command 'Get-ChildItem -File | ForEach-Object { $_.FullName }'
+$childShell = Join-Path $PSHOME 'pwsh.exe'
+& $childShell -NoLogo -NoProfile -NonInteractive -Command 'Get-ChildItem -File | ForEach-Object { $_.FullName }'
 if ($LASTEXITCODE -ne 0) { throw 'Child probe failed' }
 ```
 
@@ -114,7 +99,19 @@ Avoid automatic variables such as `$PID`, `$Host`, `$Input`, `$Matches`,
 `$Error`, and `$args` as scratch storage. Names are case-insensitive.
 Use `$processId`, `$inputText`, or `$searchArguments` instead.
 
+### Logical expressions and literal matching
+
+Wrap cmdlet invocations before combining their results with `-and` or `-or`:
+`if ((Test-Path -LiteralPath $first) -or (Test-Path -LiteralPath $second)) { ... }`.
+Otherwise the operator can be parsed as a cmdlet parameter.
+
+Quoting a path does not disable wildcard interpretation. Use `-LiteralPath`
+for a concrete name such as `report[1].txt` where the cmdlet supports it.
+Keep regex, wildcard, and literal matching separate: use `rg -F` or
+`Select-String -SimpleMatch` for literal text, and `[regex]::Escape()` when
+inserting literal data into a larger regex. Prefer single-quoted regex
+replacements such as `'$1'` when PowerShell interpolation is not intended.
+
 ## Sources
 
 - [PowerShell parsing and native arguments](https://learn.microsoft.com/en-us/powershell/module/microsoft.powershell.core/about/about_parsing)
-- [Pipeline chain operators](https://learn.microsoft.com/en-us/powershell/module/microsoft.powershell.core/about/about_pipeline_chain_operators)

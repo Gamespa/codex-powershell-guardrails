@@ -11,11 +11,9 @@ param(
 )
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
-if ($PSVersionTable.PSVersion -lt [version]'7.3') {
-  throw 'Model evaluation requires PowerShell 7.3 or later.'
-}
 if ($Repeats -lt 1 -or $TimeoutSeconds -lt 1) { throw 'Repeats and timeout must be positive.' }
 $repoRoot = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..')).Path
+& (Join-Path $repoRoot 'powershell-guardrails/scripts/check-runtime.ps1')
 $codexPath = (Get-Command codex -CommandType Application -ErrorAction Stop | Select-Object -First 1).Source
 if (-not $OutputDirectory) {
   $OutputDirectory = Join-Path $repoRoot ('artifacts/model-eval-' + [guid]::NewGuid().ToString('N'))
@@ -74,16 +72,22 @@ try {
           if ($treeExit -ne 0) { throw "Cannot enumerate baseline $BaselineRef." }
           $candidateFiles = @($baselineFiles | Where-Object {
             $_ -eq 'powershell-guardrails/SKILL.md' -or
+            $_ -like 'powershell-guardrails/scripts/*.ps1' -or
             ($_ -like 'powershell-guardrails/references/*.md' -and $_ -notlike '*/pressure-scenarios.md')
           } | ForEach-Object { $_.Substring('powershell-guardrails/'.Length) })
         } else {
           $runtimeRoot = Join-Path $repoRoot 'powershell-guardrails'
           $candidateFiles = @('SKILL.md') + @(Get-ChildItem -LiteralPath (Join-Path $runtimeRoot 'references') -Filter '*.md' -File |
             Sort-Object Name | ForEach-Object { 'references/' + $_.Name })
+          if (Test-Path -LiteralPath (Join-Path $runtimeRoot 'scripts')) {
+            $candidateFiles += @(Get-ChildItem -LiteralPath (Join-Path $runtimeRoot 'scripts') -Filter '*.ps1' -File |
+              Sort-Object Name | ForEach-Object { 'scripts/' + $_.Name })
+          }
         }
         if ('SKILL.md' -notin $candidateFiles) { throw 'Candidate entrypoint is missing.' }
         foreach ($relativePath in $candidateFiles) {
           $destination = Join-Path $candidateRoot $relativePath
+          $null = New-Item -ItemType Directory -Path (Split-Path -Parent $destination) -Force
           if ($variant -eq 'original') {
             $sourceSpec = "${BaselineRef}:powershell-guardrails/$relativePath"
             $sourceLines = git -C $repoRoot show $sourceSpec
@@ -97,8 +101,8 @@ try {
         $candidate = 'A powershell-guardrails candidate is in .agents/skills/powershell-guardrails. Read its SKILL.md and consult references only when needed. For each case, set use_skill to whether this candidate should apply; this is a per-case routing self-report.'
         if ($Mode -eq 'provided-content') {
           $providedSkill = Get-Content -LiteralPath (Join-Path $candidateRoot 'SKILL.md') -Raw -Encoding UTF8
-          $providedReference = (@($candidateFiles | Where-Object { $_ -like 'references/*' } | ForEach-Object {
-            "## Reference file: $_`n" + (Get-Content -LiteralPath (Join-Path $candidateRoot $_) -Raw -Encoding UTF8)
+          $providedReference = (@($candidateFiles | Where-Object { $_ -ne 'SKILL.md' } | ForEach-Object {
+            "## Supporting file: $_`n" + (Get-Content -LiteralPath (Join-Path $candidateRoot $_) -Raw -Encoding UTF8)
           }) -join "`n")
           $candidate = "Use the candidate documents supplied below; no file read is needed or requested. For each case, set use_skill to whether this candidate should apply (a routing self-report).`n<candidate-skill>`n$providedSkill`n</candidate-skill>`n<candidate-reference>`n$providedReference`n</candidate-reference>"
         }
@@ -106,7 +110,7 @@ try {
       $toolPolicy = if ($Mode -eq 'provided-content') {
         'Do not call any tools; all evaluation input is supplied in this prompt.'
       } else {
-        "Reading the candidate's Markdown files is allowed; no other tool actions are requested."
+        "Reading the candidate's Markdown and PowerShell source files is allowed; do not execute scripts. No other tool actions are requested."
       }
       $prompt = @"
 Evaluate independent command-design cases. $candidate
@@ -162,7 +166,7 @@ $caseSummary
           $record.missingIds = @($cases.id | Where-Object { $_ -notin $answers.id })
           $record.duplicateIds = @($answers | Group-Object id | Where-Object Count -gt 1 | Select-Object -ExpandProperty Name)
           $record.unexpectedIds = @($answers.id | Where-Object { $_ -notin $cases.id })
-          $record.candidateReadRejected = $stdout -match '(?i)Markdown read.{0,100}block|skill read.{0,100}policy.blocked|couldn.t inspect.{0,100}SKILL'
+          $record.candidateReadRejected = $stdout -match '(?i)(?:Markdown|PowerShell|script|helper) (?:source )?read.{0,100}block|skill read.{0,100}policy.blocked|couldn.t inspect.{0,100}SKILL'
           if ($Mode -eq 'discovery' -and $record.candidateReadRejected) { $record.status = 'candidate-read-rejected' }
           if ($variant -ne 'none') {
             $record.routeTotal = $cases.Count

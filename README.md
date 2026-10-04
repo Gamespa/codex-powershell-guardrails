@@ -1,14 +1,22 @@
 # PowerShell Guardrails
 
-A focused Codex skill for fragile PowerShell parser boundaries, native argument
-passing, command outcomes, Unicode transport, and uncertain job state.
-Ordinary single-shell commands and pure Bash tasks should bypass the skill.
+A focused Codex skill for fragile Windows PowerShell parser boundaries, native
+arguments, encoding/redirection, exit status, and process cleanup. Execution
+requires Windows and `pwsh` 7.6.x. Routine commands without these risks and pure
+Bash tasks should bypass the skill.
 
 The runtime entrypoint is `powershell-guardrails/SKILL.md`. Conditional examples
 are split by boundary under `powershell-guardrails/references/`. Maintenance
 scenarios live in [tests/pressure-scenarios.md](tests/pressure-scenarios.md), outside
 the installed skill. The guidance is model-independent: a newer
 model does not change PowerShell syntax or process identity requirements.
+
+Before applying the skill, run its `scripts/check-runtime.ps1` in the actual
+execution session. Unsupported versions, including Windows PowerShell 5.1 and
+PowerShell 7.7+, stop with a diagnostic. The skill does not install or upgrade
+PowerShell. Child PowerShell commands use the checked installation's
+`Join-Path $PSHOME 'pwsh.exe'`, rather than resolving a potentially different
+installation through PATH. Recheck when changing execution environments.
 
 ## Installation
 
@@ -43,6 +51,7 @@ See [official local skill discovery](https://learn.chatgpt.com/docs/build-skills
 powershell-guardrails/
   SKILL.md                      Focused runtime constraints and reference routing
   agents/openai.yaml             Display metadata
+  scripts/check-runtime.ps1      Windows and pwsh 7.6.x execution gate
   references/arguments-and-expansion.md  Native arguments, batch setup, expansion
   references/ssh-and-encoding.md         Remote payloads and Unicode transport
   references/execution-and-lifecycle.md  Status, secrets, jobs, Windows diagnostics
@@ -59,9 +68,13 @@ artifacts/                       Ignored model-evaluation results and JSONL trac
 
 ## Local Verification
 
-Requirements: PowerShell 7.3 or later, Git, and ripgrep on PATH. Runtime guidance
-also covers Windows PowerShell 5.1; the local regression suite runs in PowerShell
-7.3+ and does not claim full Windows PowerShell 5.1 coverage.
+Requirements: Windows, `pwsh` 7.6.x, Git, and ripgrep on PATH. The local suite
+uses the same runtime gate as the installed skill. When Windows PowerShell 5.1
+is present, it is invoked only to verify that the gate rejects it.
+The runtime's production matching function is also exercised with version,
+edition, and platform boundary inputs; this does not install or run those other
+versions or operating systems. Native argument checks cover Standard and Windows
+modes, including batch paths with spaces and child-only environment setup.
 
 ```powershell
 pwsh -NoLogo -NoProfile -NonInteractive -File .\scripts\verify.ps1
@@ -84,7 +97,7 @@ command and cannot override host or Group Policy restrictions.
 
 ## Model Comparison
 
-Requirements: PowerShell 7.3+, authenticated Codex CLI with `exec --json`, `--ignore-user-config`,
+Requirements: Windows, `pwsh` 7.6.x, authenticated Codex CLI with `exec --json`, `--ignore-user-config`,
 `--ephemeral`, schema support, and access to the explicitly chosen model. This
 optional command uses account quota; it is separate from the local verifier.
 
@@ -97,24 +110,25 @@ pre-update revision reviewed for this migration. Use `-BaselineRef` to compare
 another Git revision and `-Repeats` for repeated samples. Pin the baseline
 instead of silently changing it to HEAD after this update is committed.
 Use `-Variants` to select arms when an unchanged control need not be rerun.
-The runner enumerates each revision's runtime references, so comparisons also
-support the historical single-reference layout. Maintenance scenarios are
-excluded from model input.
+The runner enumerates each revision's runtime references and bundled PowerShell
+helpers, so comparisons also support the historical single-reference layout.
+Maintenance scenarios are excluded from model input.
 
 Runs use separate read-only workspaces, ignore user configuration, and disable
 common personal copies of this skill without editing those copies. The default
 `provided-content` mode supplies each candidate's entrypoint and technical
-reference directly in the prompt and requests no tools. This tests command
-design with different instructions, not automatic discovery or progressive
+references and helper source directly in the prompt and requests no tools. This
+tests command design with different instructions, not automatic discovery or progressive
 reference loading. Commands are proposed, not executed.
 
-Use `-Mode discovery` for candidates under `.agents/skills`, with Markdown reads
-permitted. Inspect traces for successful loading. A policy-rejected candidate
+Use `-Mode discovery` for candidates under `.agents/skills`, with Markdown and
+helper-source reads permitted, but no script execution. Inspect traces for
+successful loading. A policy-rejected candidate
 read invalidates that arm even if the model subsequently answers from its
 description. Do not reroute a denied read through another shell or API.
 
-Each arm answers the same 12 cases, including four negative controls. Outputs
-contain commands, routing self-reports, completeness/syntax checks, elapsed
+Each arm answers the same cases from `tests/model-cases.json`, including negative
+controls. Outputs contain commands, routing self-reports, completeness/syntax checks, elapsed
 time, and usage if exposed. Inspect `answers.json`, `trace.jsonl`, and
 `results.json` under the printed artifact directory. Errors, timeouts, response
 check failures, and detected discovery read rejections fail the command rather
