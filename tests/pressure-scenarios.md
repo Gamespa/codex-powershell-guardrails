@@ -1,4 +1,4 @@
-# PowerShell Guardrails Pressure Scenarios
+# PowerShell Guardrails Maintenance Scenarios
 
 Evaluate observable outcomes, not exact phrasing or one preferred command shape.
 A correct single-shell command is acceptable even if an example uses a file.
@@ -21,8 +21,8 @@ Do not require explanations of every parser or redundant tool-resolution probes.
 
 The repository's `tests/model-cases.json` separates prompts from expected
 outcomes. `scripts/evaluate-model.ps1` runs the comparison with Codex CLI;
-read the README for invocation and interpretation. These maintenance resources
-are not needed in the installed runtime skill.
+read the [README](../README.md#model-comparison) for invocation and interpretation.
+These maintenance resources are not part of the installed runtime skill.
 
 The comparison automatically checks response completeness, routing self-reports,
 and PowerShell syntax. Provided-content mode does not test discovery or

@@ -5,8 +5,9 @@ passing, command outcomes, Unicode transport, and uncertain job state.
 Ordinary single-shell commands and pure Bash tasks should bypass the skill.
 
 The runtime entrypoint is `powershell-guardrails/SKILL.md`. Conditional examples
-live in `references/pitfalls.md`; maintenance scenarios live in
-`references/pressure-scenarios.md`. The guidance is model-independent: a newer
+are split by boundary under `powershell-guardrails/references/`. Maintenance
+scenarios live in [tests/pressure-scenarios.md](tests/pressure-scenarios.md), outside
+the installed skill. The guidance is model-independent: a newer
 model does not change PowerShell syntax or process identity requirements.
 
 ## Installation
@@ -42,8 +43,9 @@ See [official local skill discovery](https://learn.chatgpt.com/docs/build-skills
 powershell-guardrails/
   SKILL.md                      Focused runtime constraints and reference routing
   agents/openai.yaml             Display metadata
-  references/pitfalls.md         Conditional technical examples
-  references/pressure-scenarios.md  Outcome-based maintenance scenarios
+  references/arguments-and-expansion.md  Native arguments, batch setup, expansion
+  references/ssh-and-encoding.md         Remote payloads and Unicode transport
+  references/execution-and-lifecycle.md  Status, secrets, jobs, Windows diagnostics
 scripts/
   verify.ps1                    Complete local validation entrypoint
   verify-skill.ps1               Required metadata, references, example/script syntax
@@ -51,6 +53,7 @@ scripts/
   verify-behavior.ps1            Executable local regressions
   evaluate-model.ps1             Optional no-skill/original/updated comparison
 tests/model-cases.json          Model prompts and observable expected outcomes
+tests/pressure-scenarios.md     Outcome-based maintenance scenarios
 artifacts/                       Ignored model-evaluation results and JSONL traces
 ```
 
@@ -93,6 +96,10 @@ The default baseline is commit `377c95576f9afff270ec59c65877f330e305d5d6`, the
 pre-update revision reviewed for this migration. Use `-BaselineRef` to compare
 another Git revision and `-Repeats` for repeated samples. Pin the baseline
 instead of silently changing it to HEAD after this update is committed.
+Use `-Variants` to select arms when an unchanged control need not be rerun.
+The runner enumerates each revision's runtime references, so comparisons also
+support the historical single-reference layout. Maintenance scenarios are
+excluded from model input.
 
 Runs use separate read-only workspaces, ignore user configuration, and disable
 common personal copies of this skill without editing those copies. The default
@@ -123,6 +130,11 @@ consistent quality or speed improvements.
 See [official skill evaluation guidance](https://developers.openai.com/blog/eval-skills).
 
 ## Maintenance
+
+When changing a decision boundary, consult
+[tests/pressure-scenarios.md](tests/pressure-scenarios.md). Run `scripts/verify.ps1`
+for structural checks and executable regressions. A repository verification
+pass does not establish model behavior; comparisons remain a separate check.
 
 Keep only constraints that affect decisions in the entrypoint; route conditional
 detail to the relevant reference. Do not lock verification to exact headings,

@@ -3,6 +3,8 @@ param(
   [string]$BaselineRef = '377c95576f9afff270ec59c65877f330e305d5d6',
   [ValidateSet('provided-content', 'discovery')]
   [string]$Mode = 'provided-content',
+  [ValidateSet('none', 'original', 'updated')]
+  [string[]]$Variants = @('none', 'original', 'updated'),
   [int]$Repeats = 1,
   [int]$TimeoutSeconds = 240,
   [string]$OutputDirectory
@@ -57,7 +59,7 @@ $previousNativeErrors = $PSNativeCommandUseErrorActionPreference
 $PSNativeCommandUseErrorActionPreference = $false
 try {
   foreach ($repeat in 1..$Repeats) {
-    foreach ($variant in @('none', 'original', 'updated')) {
+    foreach ($variant in $Variants) {
       $runRoot = Join-Path $outputRoot "$variant-$repeat"
       $workspace = Join-Path $runRoot 'workspace'
       $null = New-Item -ItemType Directory -Path $workspace -Force
@@ -66,7 +68,21 @@ try {
         $candidateDirectory = if ($Mode -eq 'discovery') { '.agents/skills/powershell-guardrails' } else { 'provided-candidate' }
         $candidateRoot = Join-Path $workspace $candidateDirectory
         $null = New-Item -ItemType Directory -Path (Join-Path $candidateRoot 'references') -Force
-        foreach ($relativePath in @('SKILL.md', 'references/pitfalls.md', 'references/pressure-scenarios.md')) {
+        if ($variant -eq 'original') {
+          $baselineFiles = git -C $repoRoot ls-tree -r --name-only $BaselineRef -- powershell-guardrails
+          $treeExit = $LASTEXITCODE
+          if ($treeExit -ne 0) { throw "Cannot enumerate baseline $BaselineRef." }
+          $candidateFiles = @($baselineFiles | Where-Object {
+            $_ -eq 'powershell-guardrails/SKILL.md' -or
+            ($_ -like 'powershell-guardrails/references/*.md' -and $_ -notlike '*/pressure-scenarios.md')
+          } | ForEach-Object { $_.Substring('powershell-guardrails/'.Length) })
+        } else {
+          $runtimeRoot = Join-Path $repoRoot 'powershell-guardrails'
+          $candidateFiles = @('SKILL.md') + @(Get-ChildItem -LiteralPath (Join-Path $runtimeRoot 'references') -Filter '*.md' -File |
+            Sort-Object Name | ForEach-Object { 'references/' + $_.Name })
+        }
+        if ('SKILL.md' -notin $candidateFiles) { throw 'Candidate entrypoint is missing.' }
+        foreach ($relativePath in $candidateFiles) {
           $destination = Join-Path $candidateRoot $relativePath
           if ($variant -eq 'original') {
             $sourceSpec = "${BaselineRef}:powershell-guardrails/$relativePath"
@@ -81,7 +97,9 @@ try {
         $candidate = 'A powershell-guardrails candidate is in .agents/skills/powershell-guardrails. Read its SKILL.md and consult references only when needed. For each case, set use_skill to whether this candidate should apply; this is a per-case routing self-report.'
         if ($Mode -eq 'provided-content') {
           $providedSkill = Get-Content -LiteralPath (Join-Path $candidateRoot 'SKILL.md') -Raw -Encoding UTF8
-          $providedReference = Get-Content -LiteralPath (Join-Path $candidateRoot 'references/pitfalls.md') -Raw -Encoding UTF8
+          $providedReference = (@($candidateFiles | Where-Object { $_ -like 'references/*' } | ForEach-Object {
+            "## Reference file: $_`n" + (Get-Content -LiteralPath (Join-Path $candidateRoot $_) -Raw -Encoding UTF8)
+          }) -join "`n")
           $candidate = "Use the candidate documents supplied below; no file read is needed or requested. For each case, set use_skill to whether this candidate should apply (a routing self-report).`n<candidate-skill>`n$providedSkill`n</candidate-skill>`n<candidate-reference>`n$providedReference`n</candidate-reference>"
         }
       }

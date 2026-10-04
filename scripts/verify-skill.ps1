@@ -5,8 +5,11 @@ $repoRoot = (Resolve-Path -LiteralPath $RepositoryRoot).Path
 $skillRoot = Join-Path $repoRoot 'powershell-guardrails'
 $skillPath = Join-Path $skillRoot 'SKILL.md'
 $requiredFiles = @('README.md', 'LICENSE', '.gitattributes', 'powershell-guardrails/SKILL.md',
-  'powershell-guardrails/agents/openai.yaml', 'powershell-guardrails/references/pitfalls.md',
-  'powershell-guardrails/references/pressure-scenarios.md', 'scripts/verify.ps1',
+  'powershell-guardrails/agents/openai.yaml',
+  'powershell-guardrails/references/arguments-and-expansion.md',
+  'powershell-guardrails/references/ssh-and-encoding.md',
+  'powershell-guardrails/references/execution-and-lifecycle.md',
+  'tests/pressure-scenarios.md', 'scripts/verify.ps1',
   'scripts/verify-skill.ps1', 'scripts/verify-pressure-scenarios.ps1',
   'scripts/verify-behavior.ps1', 'scripts/evaluate-model.ps1', 'tests/model-cases.json')
 foreach ($relativePath in $requiredFiles) {
@@ -46,7 +49,8 @@ if ($name.Length -gt 64 -or $name -notmatch '^[a-z0-9]+(?:-[a-z0-9]+)*$') { thro
 $description = Get-RequiredScalar 'description'
 if ($description.Length -gt 1024) { throw 'Description exceeds the skill format limit.' }
 
-$documents = @(Get-ChildItem -LiteralPath $skillRoot -Recurse -File -Filter '*.md')
+$documents = @(Get-ChildItem -LiteralPath $skillRoot -Recurse -File -Filter '*.md') +
+  @(Get-Item -LiteralPath (Join-Path $repoRoot 'README.md'), (Join-Path $repoRoot 'tests/pressure-scenarios.md'))
 foreach ($document in $documents) {
   $content = Get-Content -LiteralPath $document.FullName -Raw -Encoding UTF8
   if ($content -match '\[(?:TODO|TBD):') { throw "Unfinished scaffold: $($document.Name)" }
