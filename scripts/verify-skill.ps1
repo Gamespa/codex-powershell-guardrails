@@ -1,181 +1,76 @@
+param([string]$RepositoryRoot = (Join-Path $PSScriptRoot '..'))
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
-
-$repoRoot = Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..')
-$failures = New-Object System.Collections.Generic.List[string]
-
-function Add-Failure {
-  param([string]$Message)
-  $failures.Add($Message)
-}
-
-function Require-File {
-  param([string]$Path)
-  $fullPath = Join-Path $repoRoot $Path
-  if (-not (Test-Path -LiteralPath $fullPath -PathType Leaf)) {
-    Add-Failure "Missing required file: $Path"
+$repoRoot = (Resolve-Path -LiteralPath $RepositoryRoot).Path
+$skillRoot = Join-Path $repoRoot 'powershell-guardrails'
+$skillPath = Join-Path $skillRoot 'SKILL.md'
+$requiredFiles = @('README.md', 'LICENSE', '.gitattributes', 'powershell-guardrails/SKILL.md',
+  'powershell-guardrails/agents/openai.yaml', 'powershell-guardrails/references/pitfalls.md',
+  'powershell-guardrails/references/pressure-scenarios.md', 'scripts/verify.ps1',
+  'scripts/verify-skill.ps1', 'scripts/verify-pressure-scenarios.ps1',
+  'scripts/verify-behavior.ps1', 'scripts/evaluate-model.ps1', 'tests/model-cases.json')
+foreach ($relativePath in $requiredFiles) {
+  if (-not (Test-Path -LiteralPath (Join-Path $repoRoot $relativePath) -PathType Leaf)) {
+    throw "Missing required file: $relativePath"
   }
 }
 
-function Require-Text {
-  param(
-    [string]$Path,
-    [string]$Pattern,
-    [string]$Description
-  )
-  $fullPath = Join-Path $repoRoot $Path
-  if (-not (Select-String -LiteralPath $fullPath -Pattern $Pattern -Quiet)) {
-    Add-Failure "$Path is missing: $Description"
+$text = Get-Content -LiteralPath $skillPath -Raw -Encoding UTF8
+$frontmatter = [regex]::Match($text, '\A---\r?\n(?<Body>[\s\S]*?)\r?\n---(?:\r?\n|\z)')
+if (-not $frontmatter.Success) { throw 'SKILL.md needs delimited YAML frontmatter.' }
+
+# Validate required literal scalar fields without fixing their order or delimiter line.
+# Optional YAML metadata is left to a full YAML validator such as skill-creator's
+# quick_validate.py; this portable PowerShell check is not a general YAML parser.
+function Get-RequiredScalar {
+  param([string]$Key)
+  $matchesForKey = [regex]::Matches($frontmatter.Groups['Body'].Value, "(?m)^${Key}:\s*(?<Value>[^\r\n]*)$")
+  if ($matchesForKey.Count -ne 1) { throw "Expected one $Key field." }
+  $rawValue = $matchesForKey[0].Groups['Value'].Value.Trim()
+  if ($rawValue -match '^[>|][-+]?$') {
+    $block = [regex]::Match($frontmatter.Groups['Body'].Value, "(?m)^${Key}:\s*[>|][-+]?\s*\r?\n(?<Lines>(?:[ \t]+[^\r\n]*(?:\r?\n|\z))+)")
+    $rawValue = ($block.Groups['Lines'].Value.Trim() -split '\r?\n' | ForEach-Object { $_.Trim() }) -join ' '
+  } elseif ($rawValue.StartsWith('"') -and $rawValue.EndsWith('"')) {
+    $rawValue = $rawValue | ConvertFrom-Json
+  } elseif ($rawValue.StartsWith("'") -and $rawValue.EndsWith("'")) {
+    $rawValue = $rawValue.Substring(1, $rawValue.Length - 2).Replace("''", "'")
+  } elseif ($rawValue -match '^\d+$|^(true|false|null|~)$|^[\[\{&*!]') {
+    throw "$Key must be a literal string scalar."
   }
+  if ([string]::IsNullOrWhiteSpace($rawValue)) { throw "$Key cannot be empty." }
+  return $rawValue
 }
+$name = Get-RequiredScalar 'name'
+if ($name -ne (Split-Path -Leaf $skillRoot)) { throw 'Skill name must match its directory.' }
+if ($name.Length -gt 64 -or $name -notmatch '^[a-z0-9]+(?:-[a-z0-9]+)*$') { throw 'Invalid skill name.' }
+$description = Get-RequiredScalar 'description'
+if ($description.Length -gt 1024) { throw 'Description exceeds the skill format limit.' }
 
-$requiredFiles = @(
-  'README.md',
-  'LICENSE',
-  '.gitattributes',
-  'powershell-guardrails/SKILL.md',
-  'powershell-guardrails/agents/openai.yaml',
-  'powershell-guardrails/references/pitfalls.md',
-  'powershell-guardrails/references/pressure-scenarios.md',
-  'scripts/verify.ps1',
-  'scripts/verify-pressure-scenarios.ps1',
-  'scripts/verify-skill.ps1'
-)
-
-foreach ($path in $requiredFiles) {
-  Require-File $path
-}
-
-$skillPath = Join-Path $repoRoot 'powershell-guardrails/SKILL.md'
-$skillLines = Get-Content -LiteralPath $skillPath
-
-if ($skillLines.Count -lt 4 -or $skillLines[0] -ne '---' -or $skillLines[3] -ne '---') {
-  Add-Failure 'SKILL.md frontmatter must occupy lines 1-4.'
-}
-
-$nameLine = $skillLines | Where-Object { $_ -like 'name:*' } | Select-Object -First 1
-if ($nameLine -ne 'name: powershell-guardrails') {
-  Add-Failure 'SKILL.md name must be powershell-guardrails.'
-}
-
-$descriptionLine = $skillLines | Where-Object { $_ -like 'description:*' } | Select-Object -First 1
-if (-not $descriptionLine) {
-  Add-Failure 'SKILL.md must have a description.'
-} else {
-  $description = $descriptionLine -replace '^description: ', ''
-  if (-not $description.StartsWith('Use when')) {
-    Add-Failure 'SKILL.md description must start with "Use when".'
-  }
-  if ($description.Length -gt 500) {
-    Add-Failure "SKILL.md description is too long: $($description.Length) characters."
-  }
-  if ($description -match 'checklist|safe pattern|choose command shapes|identify which shell') {
-    Add-Failure 'SKILL.md description should describe triggers, not workflow.'
-  }
-}
-
-Require-Text 'powershell-guardrails/SKILL.md' '^## Fast Path$' 'Fast Path section'
-Require-Text 'powershell-guardrails/SKILL.md' 'references/pressure-scenarios\.md' 'pressure scenario reference'
-Require-Text 'powershell-guardrails/SKILL.md' 'read-only\s+command' 'destructive command read-only gate'
-Require-Text 'powershell-guardrails/SKILL.md' '\$\{name\}' 'braced variable-boundary guidance'
-Require-Text 'powershell-guardrails/SKILL.md' 'API headers, tokens, JSON bodies' 'structured API request guidance'
-Require-Text 'powershell-guardrails/SKILL.md' 'file metrics, line counts, or inventory reports' 'complex local inventory guidance'
-Require-Text 'powershell-guardrails/SKILL.md' 'empty stdout as ambiguous' 'empty native output guidance'
-Require-Text 'powershell-guardrails/SKILL.md' 'UTF-8 without a BOM' 'Unix-bound encoding guidance'
-Require-Text 'powershell-guardrails/SKILL.md' 'save the remote PID, log, and exit status' 'remote job state guidance'
-Require-Text 'powershell-guardrails/SKILL.md' '-NonInteractive' 'non-interactive child PowerShell guidance'
-Require-Text 'powershell-guardrails/SKILL.md' 'blocked by policy' 'host safety policy guidance'
-Require-Text 'powershell-guardrails/SKILL.md' 'EPIPE' 'local broken-pipe guidance'
-Require-Text 'powershell-guardrails/references/pitfalls.md' '& \$tool @args' 'argument-array safe pattern'
-Require-Text 'powershell-guardrails/references/pitfalls.md' `
-  '^## 1a\. Bare Child PowerShell In Automation$' 'automated child PowerShell pitfall'
-Require-Text 'powershell-guardrails/references/pitfalls.md' '^## 3d\. Member Access And Indexing In Nested Commands$' 'member/index nested command pitfall'
-Require-Text 'powershell-guardrails/references/pitfalls.md' '^## 3e\. Complex Local Inventory One-Liners$' 'complex local inventory pitfall'
-Require-Text 'powershell-guardrails/references/pitfalls.md' '^## 5a\. Native Batch Toolchain Boundaries$' 'cmd and batch toolchain boundary pitfall'
-Require-Text 'powershell-guardrails/references/pitfalls.md' `
-  '^## 7a\. Host Safety Policy Is Not Execution Policy$' 'host safety policy pitfall'
-Require-Text 'powershell-guardrails/references/pitfalls.md' '^## 8a\. Variables Followed By Punctuation$' 'variable punctuation pitfall'
-Require-Text 'powershell-guardrails/references/pitfalls.md' '^## 3g\. Empty Output And Native Search Exit Codes$' 'native search result pitfall'
-Require-Text 'powershell-guardrails/references/pitfalls.md' '^## 3h\. Parsing Human-Readable Native Output$' 'structured native output pitfall'
-Require-Text 'powershell-guardrails/references/pitfalls.md' '^## 3i\. Sensitive Searches Without Secret Output$' 'sensitive output pitfall'
-Require-Text 'powershell-guardrails/references/pitfalls.md' '\$PID' 'reserved PID guidance'
-Require-Text 'powershell-guardrails/references/pitfalls.md' `
-  '^## 11b\. Long-Running Remote Jobs And SSH Timeouts$' 'remote job timeout pitfall'
-Require-Text 'powershell-guardrails/references/pitfalls.md' `
-  '^## 11c\. Local Batch Timeouts And Closed Pipes$' 'local batch broken-pipe pitfall'
-Require-Text 'powershell-guardrails/references/pressure-scenarios.md' '^## Scenario 11\. Variable Followed By Colon$' 'variable colon pressure scenario'
-Require-Text 'powershell-guardrails/references/pressure-scenarios.md' '^## Scenario 12\. API Request With Token And JSON$' 'API request pressure scenario'
-Require-Text 'powershell-guardrails/references/pressure-scenarios.md' '^## Scenario 13\. Native Batch Toolchain Setup$' 'native batch toolchain pressure scenario'
-Require-Text 'powershell-guardrails/references/pressure-scenarios.md' '^## Scenario 15\. Recursive File Inventory$' 'recursive file inventory pressure scenario'
-Require-Text 'powershell-guardrails/references/pressure-scenarios.md' '^## Scenario 18\. Search With No Matches$' 'native search exit-code scenario'
-Require-Text 'powershell-guardrails/references/pressure-scenarios.md' '^## Scenario 19\. Remote Build Outlives Local SSH Timeout$' 'remote job timeout scenario'
-Require-Text 'powershell-guardrails/references/pressure-scenarios.md' `
-  '^## Scenario 20\. Non-Interactive Child PowerShell$' 'non-interactive child PowerShell scenario'
-Require-Text 'README.md' 'scripts[\\/]verify-skill\.ps1' 'verification command'
-Require-Text 'README.md' 'scripts[\\/]verify-pressure-scenarios\.ps1' 'pressure-scenario verification command'
-Require-Text 'README.md' 'scripts[\\/]verify\.ps1' 'full verification command'
-Require-Text 'scripts/verify-skill.ps1' 'verify-pressure-scenarios\.ps1' 'pressure scenario verifier invocation'
-Require-Text 'scripts/verify.ps1' 'git diff --check' 'diff hygiene check'
-
-$badContentPatterns = @(
-  'TODO',
-  'TBD',
-  'FIXME',
-  'producer-password',
-  'producer\.\*password',
-  'npm --prefix web',
-  'src/App\.test\.tsx',
-  'Gamespa',
-  'Moos',
-  'Modo',
-  'home_dev',
-  '\.ssh',
-  'my-linux',
-  'localhost',
-  '127\.0\.0\.1',
-  'D:\\',
-  'C:\\Users'
-)
-
-$scanFiles = @(
-  'README.md',
-  'powershell-guardrails/SKILL.md',
-  'powershell-guardrails/references/pitfalls.md',
-  'powershell-guardrails/references/pressure-scenarios.md',
-  'powershell-guardrails/agents/openai.yaml'
-)
-
-foreach ($path in $scanFiles) {
-  $fullPath = Join-Path $repoRoot $path
-  foreach ($pattern in $badContentPatterns) {
-    if (Select-String -LiteralPath $fullPath -Pattern $pattern -Quiet) {
-      Add-Failure "$path contains non-generic or stale pattern: $pattern"
+$documents = @(Get-ChildItem -LiteralPath $skillRoot -Recurse -File -Filter '*.md')
+foreach ($document in $documents) {
+  $content = Get-Content -LiteralPath $document.FullName -Raw -Encoding UTF8
+  if ($content -match '\[(?:TODO|TBD):') { throw "Unfinished scaffold: $($document.Name)" }
+  foreach ($link in [regex]::Matches($content, '\[[^\]]+\]\((?<Target>[^\s)]+)\)')) {
+    $target = $link.Groups['Target'].Value
+    if ($target -match '^[a-z][a-z0-9+.-]*:|^#') { continue }
+    $localPath = ($target -split '#', 2)[0]
+    if ($localPath -and -not (Test-Path -LiteralPath (Join-Path $document.DirectoryName $localPath))) {
+      throw "Broken local reference in $($document.Name): $target"
     }
   }
-}
-
-foreach ($path in $scanFiles) {
-  $fullPath = Join-Path $repoRoot $path
-  $lineNumber = 0
-  foreach ($line in Get-Content -LiteralPath $fullPath) {
-    $lineNumber++
-    if ($path -eq 'powershell-guardrails/SKILL.md' -and $lineNumber -eq 3) {
-      continue
-    }
-    if ($line.Length -gt 160) {
-      Add-Failure "$path line $lineNumber exceeds 160 characters."
-    }
+  $fences = [regex]::Matches($content, '(?m)^```[^\r\n]*$')
+  if ($fences.Count % 2 -ne 0) { throw "Unclosed code fence: $($document.Name)" }
+  foreach ($example in [regex]::Matches($content, '(?ms)^```powershell\r?\n(?<Code>.*?)^```\s*$')) {
+    $parseTokens = $null
+    $parseErrors = $null
+    $null = [Management.Automation.Language.Parser]::ParseInput($example.Groups['Code'].Value, [ref]$parseTokens, [ref]$parseErrors)
+    if ($parseErrors.Count -gt 0) { throw "Invalid PowerShell example in $($document.Name): $($parseErrors[0].Message)" }
   }
 }
-
-if ($failures.Count -gt 0) {
-  foreach ($failure in $failures) {
-    Write-Error $failure -ErrorAction Continue
-  }
-  exit 1
+foreach ($scriptFile in Get-ChildItem -LiteralPath (Join-Path $repoRoot 'scripts') -Filter '*.ps1' -File) {
+  $parseTokens = $null
+  $parseErrors = $null
+  $null = [Management.Automation.Language.Parser]::ParseFile($scriptFile.FullName, [ref]$parseTokens, [ref]$parseErrors)
+  if ($parseErrors.Count -gt 0) { throw "Invalid script $($scriptFile.Name): $($parseErrors[0].Message)" }
 }
-
-$pressureVerifier = Join-Path $repoRoot 'scripts/verify-pressure-scenarios.ps1'
-& $pressureVerifier
-
-Write-Host 'PowerShell guardrails skill verification passed.'
+Write-Host 'Skill metadata, local references, and PowerShell syntax checks passed.'

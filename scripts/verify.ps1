@@ -1,9 +1,15 @@
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
-$scriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
+$repoRoot = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..')).Path
 
-& (Join-Path $scriptRoot 'verify-skill.ps1')
-git diff --check
+foreach ($verifier in @('verify-skill.ps1', 'verify-pressure-scenarios.ps1', 'verify-behavior.ps1')) {
+  & (Join-Path $PSScriptRoot $verifier)
+}
+git -C $repoRoot diff --check
+$diffExit = $LASTEXITCODE
+if ($diffExit -ne 0) {
+  throw "git diff --check failed with exit code $diffExit."
+}
 
 Write-Host 'Repository validation chain passed.'

@@ -1,4 +1,4 @@
 interface:
   display_name: "PowerShell Guardrails"
-  short_description: "Avoid Windows PowerShell command hazards"
-  default_prompt: "Use $powershell-guardrails when composing fragile Windows PowerShell, pwsh, SSH, or native command lines."
+  short_description: "Resolve fragile PowerShell parser boundaries"
+  default_prompt: "Use $powershell-guardrails to resolve this PowerShell quoting, native argument, or command outcome problem."
