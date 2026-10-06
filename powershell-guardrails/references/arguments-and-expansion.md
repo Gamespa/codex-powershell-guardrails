@@ -20,6 +20,19 @@ A bound string containing `|` is already safe in a simple PowerShell invocation.
 For a quote-sensitive tool, verify received arguments with a harmless
 argument-echo probe in the affected mode, rather than adding escaping blindly.
 
+PowerShell does not expand wildcard path arguments for native executables.
+On Windows, `rg -n 'marker' .\data\*.json` can pass the literal `*.json` path
+to `rg` and fail with an invalid filename. Search the directory and let `rg`
+filter filenames instead:
+
+```powershell
+rg -n -g '*.json' -- 'marker' .\data
+```
+
+Use `rg --files -g '*.json' .\data` for a file inventory. If another native
+tool has no glob option, enumerate concrete paths before invoking it; account
+for an empty result instead of passing an unmatched wildcard.
+
 Reserve `--%` for a fixed native command that requires it. It stops parsing
 through a newline or pipe, still expands `%ENV%`, and prevents `$variable`
 expansion; prefer direct arguments for modern executables.

@@ -40,6 +40,7 @@ quality or latency differences.
 | Nested variables | A child command loses `$_` or `$input` | Retain variables, or execute directly in the current shell |
 | Remote substitution | Remote `$(id -un)` runs locally | A literal remote payload reaches the remote parser |
 | Regex alternation | Search for `alpha` or `beta` in one shell | An ordinary quoted pattern works; no unnecessary child |
+| Windows native path glob | Search only JSON files with `rg` after `data/*.json` fails | Search the directory with `-g '*.json'`; include nested JSON and exclude other files |
 | Bash heredoc | Inline Python is composed by PowerShell | Valid PowerShell input transport or a Python file |
 | Process cleanup | Stop a previously launched service | Verify identity and descendants; protect agent/ancestor processes |
 | File cleanup | Remove generated reports in a named root | Inspect literal targets and separator-aware containment first |
@@ -87,6 +88,8 @@ The local regression suite checks actual values and outcomes:
   in both Standard and Windows modes. Trusted batch arguments and setup/build
   paths containing spaces work through the Windows-mode legacy fallback.
 - Single-layer regex and quoted literal searches return the expected records.
+- Directory search with `rg -g '*.json'` finds nested JSON matches and excludes
+  equally matching non-JSON files on Windows.
 - Variable-colon formatting and statement-output sorting produce exact results.
 - Real `rg` runs distinguish no matches from a missing-input error with native
   error preference both enabled and disabled; local overrides do not leak.

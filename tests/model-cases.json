@@ -14,6 +14,27 @@
     "expectedOutcome": "Preserve empty/quoted arguments; account for native argument mode, not just arrays or indiscriminate --%."
   },
   {
+    "id": "windows_rg_file_glob",
+    "shouldTrigger": true,
+    "language": "powershell",
+    "prompt": "On Windows in pwsh 7.6.x, rg -n 'marker' .\\data\\*.json failed with an invalid filename. Search only JSON files under .\\data, including nested folders, and show matching lines.",
+    "expectedOutcome": "Search the directory with rg -g '*.json' (or enumerate concrete files); do not pass the wildcard pathname literally to rg."
+  },
+  {
+    "id": "colon_interpolation_recent",
+    "shouldTrigger": true,
+    "language": "powershell",
+    "prompt": "In pwsh 7.6.x, a loop tried to print \"$name: count=$($items.Count)\" and got a variable-reference parser error. Print the filename, a literal colon, and the count.",
+    "expectedOutcome": "Use ${name} or -f formatting so the colon remains literal; no child shell is needed."
+  },
+  {
+    "id": "embedded_python_quotes_recent",
+    "shouldTrigger": true,
+    "language": "powershell",
+    "prompt": "On Windows in pwsh 7.6.x, nested quoting around python -c broke a multiline snippet that sets record = {'name': 'item', 'id': 7} and prints f\"{record['name']}: {record['id']}\". Run the snippet reliably and fail if Python exits nonzero.",
+    "expectedOutcome": "Use a literal PowerShell here-string piped to Python stdin or a .py file for the quote-sensitive code; check Python's native exit status."
+  },
+  {
     "id": "search_status",
     "shouldTrigger": true,
     "language": "powershell",

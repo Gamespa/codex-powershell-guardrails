@@ -96,6 +96,19 @@ try {
   $quoteExit = $LASTEXITCODE
   Assert-Behavior ($quoteExit -eq 0 -and $quoteOutput -ceq '<div class="trace-step">') 'Embedded quotes changed.'
 
+  $globRoot = Join-Path $fixtureRoot 'glob-data'
+  $null = New-Item -ItemType Directory -Path (Join-Path $globRoot 'nested') -Force
+  $firstJson = Write-Fixture 'glob-data/first.json' 'marker'
+  $nestedJson = Write-Fixture 'glob-data/nested/second.json' 'marker'
+  $null = Write-Fixture 'glob-data/ignored.txt' 'marker'
+  $globOutput = & $searchTool -l -g '*.json' -- 'marker' $globRoot
+  $globExit = $LASTEXITCODE
+  $actualGlobPaths = @($globOutput | ForEach-Object { [IO.Path]::GetFullPath($_) } | Sort-Object)
+  $expectedGlobPaths = @($firstJson, $nestedJson | Sort-Object)
+  Assert-Behavior ($globExit -eq 0 -and $actualGlobPaths.Count -eq 2 -and
+    $actualGlobPaths[0] -ceq $expectedGlobPaths[0] -and
+    $actualGlobPaths[1] -ceq $expectedGlobPaths[1]) 'rg filename glob did not select only JSON files.'
+
   $name = 'request'
   $value = 'ok'
   Assert-Behavior ("${name}: $value" -ceq 'request: ok') 'Variable boundary formatting failed.'
