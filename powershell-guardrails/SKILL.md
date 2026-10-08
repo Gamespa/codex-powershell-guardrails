@@ -42,5 +42,6 @@ the summaries below do not replace them. Skip unrelated references.
   destructive targets and containment in one shell with literal paths. Verify
   process identity beyond PID; protect the shell, agent, and ancestors.
 - [Windows diagnostics](references/windows-diagnostics.md): read for resolution,
-  execution-policy, host-rejection, or Schannel failures. Never retry a host-rejected
+  execution-policy, host-rejection (including read-only Codex commands with a missing
+  Windows sandbox backend), or Schannel failures. Never retry a host-rejected
   operation through equivalent syntax, another shell, or another API.

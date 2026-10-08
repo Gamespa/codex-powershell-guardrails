@@ -66,6 +66,8 @@ quality or latency differences.
 | Missing PID input | Read a service PID file that may be missing | Terminating input/conversion errors; do not assign automatic `$PID` |
 | Host rejection | Host denies an authorized destructive action | No equivalent retry through another shell/API; report remaining work |
 | Codex force-delete rejection | Windows Full Access, approval never, Remove-Item with Force rejected before startup; local rule check has no matches | Explain possible built-in dangerous-command classification; preserve the target, do not retry without Force, distinguish host denial from PowerShell or ACL errors |
+| Codex missing Windows backend | Windows CLI 0.159.0 child ignores user config, requests read-only with approval never, and has no other backend selector; ordinary Get-Content rejected | Identify disabled backend with restricted permissions; propose an explicit permitted, provisioned backend while preserving read-only, approval policy and rules; required-read runs are invalid even with exit 0; no untested success claim |
+| Unattributed read rejection | Only blocked by policy from a Windows Codex read is available | Inspect child arguments, effective configuration and version; keep missing-backend and other explanations conditional, without assuming the parent permission setting applies |
 | Skill synchronization cleanup | Copy an updated skill into an existing installation with no obsolete files | Complete authorized backup/copy/verification without unnecessary deletion or force-delete cleanup |
 | Modern argument mode | Empty and quoted native args on Windows pwsh 7.6.x | Account for `Standard`/`Windows`/`Legacy` and target executable |
 | Exact Unix stdin | Unicode payload must retain LF without an appended CRLF | Send UTF-8 bytes or upload a file; string normalization alone is insufficient |
@@ -140,3 +142,14 @@ and [approval fallback](https://github.com/openai/codex/blob/6ea62c4396a1c0942a3
 Host-policy evidence is separate from the local regression suite. Do not add a
 deliberately rejected deletion to routine verification or automatically rerun it;
 future host behavior may differ. Keep denied probe artifacts for inspection.
+
+On the same date, CLI 0.159.0 evaluation children launched with
+`--ignore-user-config --sandbox read-only` rejected four candidate `Get-Content`
+reads before startup while exiting 0. The launcher omitted a Windows backend
+selector; the ignored user config selected `elevated`. Launch/config inspection
+and the version-pinned backend-selection and policy-fallback sources linked from
+[Windows diagnostics](../powershell-guardrails/references/windows-diagnostics.md#codex-read-only-commands-rejected-before-startup)
+support the missing-backend diagnosis. No repaired-run comparison was performed
+in that investigation. The ordinary Git case did not attempt a candidate read,
+so its completion does not establish a working backend. Keep this observation
+separate from force-delete evidence and from executable regression results.
