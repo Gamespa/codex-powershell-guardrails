@@ -127,8 +127,16 @@ For PID reuse, remote locking, host policy, or readiness behavior, add an
 appropriate isolated service/remote fixture when that behavior changes. Do not
 claim those external paths were executed by the local regression suite.
 
-Host-policy evidence is separate from the local regression suite. On 2026-10-08,
-the active Codex CLI 0.159.0 runner accepted deletion without `-Force` and rejected
-the corresponding force-delete probe before PowerShell startup. Do not add a
+## Host-policy Evidence
+
+A local controlled probe on 2026-10-08 with Codex CLI 0.159.0 found that deletion
+of an ordinary disposable file without `-Force` succeeded, while the equivalent
+operation on a separate matching file with `-Force` was rejected before startup.
+This is a host/version observation, not a universal PowerShell restriction or
+proof that every policy rejection has this cause. See the upstream
+[force-delete heuristic](https://github.com/openai/codex/blob/6ea62c4396a1c0942a3ea271e062bdd9e0d2737f/codex-rs/shell-command/src/command_safety/windows_dangerous_commands.rs#L207)
+and [approval fallback](https://github.com/openai/codex/blob/6ea62c4396a1c0942a3ea271e062bdd9e0d2737f/codex-rs/core/src/exec_policy.rs#L793).
+
+Host-policy evidence is separate from the local regression suite. Do not add a
 deliberately rejected deletion to routine verification or automatically rerun it;
 future host behavior may differ. Keep denied probe artifacts for inspection.

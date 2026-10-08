@@ -50,18 +50,8 @@ if ($LASTEXITCODE -ne 0) { throw 'Native build failed' }
 ```
 
 This assumes a trusted setup path; do not interpolate untrusted input into
-batch code. For a one-command environment override, restore the prior value:
-
-```powershell
-$previousPrompt = $env:GIT_TERMINAL_PROMPT
-try {
-  $env:GIT_TERMINAL_PROMPT = '0'
-  git ls-remote origin
-  if ($LASTEXITCODE -ne 0) { throw 'Git probe failed' }
-} finally {
-  $env:GIT_TERMINAL_PROMPT = $previousPrompt
-}
-```
+batch code. For temporary environment overrides, save the prior value, set and
+use the override inside `try`, and restore it in `finally`, including on failure.
 
 ## Expansion and embedded payloads
 
@@ -92,20 +82,14 @@ if ($LASTEXITCODE -ne 0) { throw 'Python failed' }
 
 ### Interpolation and statements
 
-`"$name: $value"` is ambiguous with scoped-variable syntax. Use
-`"${name}: $value"` or `'{0}: {1}' -f $name, $value`. For member expressions in
-expandable strings, use `"status=$($response.StatusCode)"`; `${response}` alone
-does not evaluate `.StatusCode`.
+Use `"${name}: $value"` to avoid colon/scoped-variable ambiguity and
+`"status=$($response.StatusCode)"` to evaluate a member inside a string.
 
 Collect statement results, use pipeline cmdlets, or wrap statements before a
 pipe. `foreach` and `if` cannot directly occupy a pipeline's first position:
 
 ```powershell
-& {
-  foreach ($item in $items) {
-    [pscustomobject]@{ Name = $item.Name }
-  }
-} | Sort-Object Name
+& { foreach ($item in $items) { $item.Name } } | Sort-Object
 ```
 
 Avoid automatic variables such as `$PID`, `$Host`, `$Input`, `$Matches`,

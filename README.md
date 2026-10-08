@@ -66,8 +66,12 @@ powershell-guardrails/
   agents/openai.yaml             Display metadata
   scripts/check-runtime.ps1      Windows and pwsh 7.6+ execution gate
   references/arguments-and-expansion.md  Native arguments, batch setup, expansion
-  references/ssh-and-encoding.md         Remote payloads and Unicode transport
-  references/execution-and-lifecycle.md  Status, secrets, jobs, Windows diagnostics
+  references/ssh-payloads.md             Remote scripts and shared stdin
+  references/encoding-and-redirection.md Local encoding and exact byte transport
+  references/command-outcomes.md        Exit status and structured output
+  references/sensitive-data.md          Credentials and sanitized search output
+  references/jobs-and-cleanup.md        Job lifecycle and verified cleanup
+  references/windows-diagnostics.md     Conditional Windows failure diagnosis
   references/runtime.md         Conditional runtime discovery and installation
 scripts/
   verify.ps1                    Complete local validation entrypoint
