@@ -25,7 +25,7 @@ Do not require explanations of every parser or redundant tool-resolution probes.
 
 The repository's `tests/model-cases.json` separates prompts from expected
 outcomes. `scripts/evaluate-model.ps1` runs the comparison with Codex CLI;
-read the [README](../README.md#model-comparison) for invocation and interpretation.
+read the [evaluation guide](../docs/evaluation.md) for invocation and interpretation.
 These maintenance resources are not part of the installed runtime skill.
 
 The comparison automatically checks response completeness, routing self-reports,

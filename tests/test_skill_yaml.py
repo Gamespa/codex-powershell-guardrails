@@ -39,6 +39,37 @@ class ManifestTests(unittest.TestCase):
             with self.subTest(extra=extra):
                 self.check(agent=interface + extra if not extra.startswith("interface:") else extra)
 
+    def test_frontmatter_contracts(self):
+        for header in (
+            "name: another-skill\ndescription: Repair",
+            "name: powershell-guardrails\ndescription: Repair\nmetadata: {count: 1}",
+            "name: powershell-guardrails\ndescription: Repair\nlicense: false",
+            "name: powershell-guardrails\ndescription: " + "x" * 1025,
+        ):
+            with self.subTest(header=header):
+                self.check(header=header)
+
+    def test_icon_containment(self):
+        with tempfile.TemporaryDirectory() as directory:
+            base = Path(directory)
+            root = base / "skill"
+            root.mkdir()
+            (root / "icon.svg").write_text("<svg/>", encoding="utf-8")
+            (base / "outside.svg").write_text("<svg/>", encoding="utf-8")
+            interface = {"display_name": "Guardrails", "short_description": "Repair", "icon_small": "icon.svg"}
+            validator.validate_interface(interface, root)
+            for path in ("../outside.svg", "missing.svg", str(base / "outside.svg")):
+                with self.subTest(path=path), self.assertRaises(ValueError):
+                    validator.validate_interface({**interface, "icon_small": path}, root)
+
+    def test_optional_sections_and_unknown_fields(self):
+        validator.validate_policy({})
+        validator.validate_dependencies({})
+        for agent in ({"policy": {"unknown": True}}, {"dependencies": {"unknown": []}}):
+            with self.subTest(agent=agent), self.assertRaises(ValueError):
+                validator.validate_policy(agent)
+                validator.validate_dependencies(agent)
+
 
 if __name__ == "__main__":
     unittest.main()

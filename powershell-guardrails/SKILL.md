@@ -23,25 +23,17 @@ Use `Join-Path $PSHOME 'pwsh.exe'` for children; recheck when changing environme
 Before repairing a command, read the references for its affected boundaries;
 the summaries below do not replace them. Skip unrelated references.
 
-- [Arguments and expansion](references/arguments-and-expansion.md): keep variables
-  in their owning parser; prefer literal payloads/files and the current shell.
-  Native quoting depends on the executable and `$PSNativeCommandArgumentPassing`,
-  not just arrays. Covers batch environments and PowerShell expression pitfalls.
-- [SSH payloads](references/ssh-payloads.md): preserve remote expansion and exact
-  script bytes; account for shared stdin.
-- [Encoding and redirection](references/encoding-and-redirection.md): follow the
-  consumer's byte, encoding, and newline contract. Native text stdin can append a
-  platform newline; file output is a separate boundary.
+- [Arguments and expansion](references/arguments-and-expansion.md): nested parsers,
+  native quoting modes, batch setup, interpolation, and statement syntax.
+- [SSH payloads](references/ssh-payloads.md): remote expansion, script transport,
+  and shared stdin.
+- [Encoding and redirection](references/encoding-and-redirection.md): byte,
+  encoding, and newline contracts for stdin, files, and binary output.
 - [Command outcomes and structured output](references/command-outcomes.md):
-  terminate unexpected cmdlet errors; capture native `$LASTEXITCODE` immediately.
-  `rg`: 0 matches, 1 no matches, 2 error. Preserve objects until serialization.
-- [Sensitive data](references/sensitive-data.md): keep secrets out of argv and
-  raw tool output; filter matches inside the producing process, including `rg --json`.
-- [Jobs and cleanup](references/jobs-and-cleanup.md): poll existing sessions;
-  inspect prior jobs/outputs before retrying timeouts or broken pipes. Inspect exact
-  destructive targets and containment in one shell with literal paths. Verify
-  process identity beyond PID; protect the shell, agent, and ancestors.
-- [Windows diagnostics](references/windows-diagnostics.md): read for resolution,
-  execution-policy, host-rejection (including read-only Codex commands with a missing
-  Windows sandbox backend), or Schannel failures. Never retry a host-rejected
-  operation through equivalent syntax, another shell, or another API.
+  terminating errors, native exit codes, search outcomes, and JSON structure.
+- [Sensitive data](references/sensitive-data.md): credentials and sanitizing
+  search output before it crosses the tool boundary.
+- [Jobs and cleanup](references/jobs-and-cleanup.md): session polling, timeouts,
+  readiness, process identity, and verified filesystem cleanup.
+- [Windows diagnostics](references/windows-diagnostics.md): executable resolution,
+  execution policy, host rejections, Windows sandbox configuration, and Schannel.

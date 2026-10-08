@@ -35,7 +35,7 @@ def string(value, label, required=True):
         raise ValueError(f"{label} must be a nonempty string")
 
 
-def validate(root):
+def validate_frontmatter(root):
     text = (root / "SKILL.md").read_text(encoding="utf-8")
     match = re.match(r"\A---\r?\n(.*?)\r?\n---(?:\r?\n|\Z)", text, re.S)
     if not match:
@@ -59,11 +59,20 @@ def validate(root):
     for key in ("license", "compatibility", "allowed-tools"):
         if key in manifest:
             string(manifest[key], key)
+
+
+def validate(root):
+    validate_frontmatter(root)
     agent_path = root / "agents" / "openai.yaml"
     if not agent_path.exists():
         return  # Optional for standalone skills.
     agent = load_mapping(agent_path.read_text(encoding="utf-8"), "openai.yaml")
-    interface = agent.get("interface")
+    validate_interface(agent.get("interface"), root)
+    validate_policy(agent)
+    validate_dependencies(agent)
+
+
+def validate_interface(interface, root):
     if not isinstance(interface, dict):
         raise ValueError("interface must be a mapping")
     for key in ("display_name", "short_description"):
@@ -79,6 +88,9 @@ def validate(root):
             target = (root / path).resolve()
             if not target.is_relative_to(root.resolve()) or not target.is_file():
                 raise ValueError(f"{key} must point to a file inside the skill")
+
+
+def validate_policy(agent):
     if "policy" in agent:
         policy = agent["policy"]
         if not isinstance(policy, dict) or set(policy) - {"products", "allow_implicit_invocation"}:
@@ -89,6 +101,9 @@ def validate(root):
             products = policy["products"]
             if not isinstance(products, list) or not products or any(p not in ("CHAT", "CODEX") for p in products):
                 raise ValueError("products must contain CHAT and/or CODEX")
+
+
+def validate_dependencies(agent):
     if "dependencies" in agent:
         dependencies = agent["dependencies"]
         if not isinstance(dependencies, dict) or set(dependencies) - {"tools"}:

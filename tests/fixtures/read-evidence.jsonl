@@ -1,0 +1,9 @@
+transport noise
+{}
+{"type":"item.completed"}
+{"type":"item.completed","item":{"type":"command_execution"}}
+{"type":"item.completed","item":{"type":"agent_message","text":"I read SKILL.md"}}
+{"type":"item.completed","item":{"type":"command_execution","command":"Get-Content .agents/skills/powershell-guardrails/SKILL.md","status":"completed","exit_code":0,"aggregated_output":"name: powershell-guardrails"}}
+{"type":"item.completed","item":{"type":"command_execution","command":"Get-Content .agents/skills/powershell-guardrails/references/runtime.md","status":"completed","exit_code":0,"aggregated_output":"# Runtime Preparation"}}
+{"type":"item.completed","item":{"type":"command_execution","command":"Get-Content .agents/skills/powershell-guardrails/references/ssh-payloads.md","status":"failed","exit_code":1,"aggregated_output":"# SSH Payloads"}}
+{"type":"turn.completed","usage":{"input_tokens":12,"output_tokens":6}}

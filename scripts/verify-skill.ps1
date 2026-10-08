@@ -3,38 +3,29 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 $repoRoot = (Resolve-Path -LiteralPath $RepositoryRoot).Path
 $skillRoot = Join-Path $repoRoot 'powershell-guardrails'
-$skillPath = Join-Path $skillRoot 'SKILL.md'
+# Public entrypoints and the installable package are contracts; internal layout is not.
 $requiredFiles = @('README.md', 'LICENSE', '.gitattributes', 'powershell-guardrails/SKILL.md',
-  'powershell-guardrails/agents/openai.yaml',
-  'powershell-guardrails/scripts/check-runtime.ps1',
-  'powershell-guardrails/references/arguments-and-expansion.md',
-  'powershell-guardrails/references/ssh-payloads.md',
-  'powershell-guardrails/references/encoding-and-redirection.md',
-  'powershell-guardrails/references/command-outcomes.md',
-  'powershell-guardrails/references/sensitive-data.md',
-  'powershell-guardrails/references/jobs-and-cleanup.md',
-  'powershell-guardrails/references/windows-diagnostics.md',
-  'powershell-guardrails/references/runtime.md', 'scripts/validate-skill-yaml.py',
-  'tests/pressure-scenarios.md', 'scripts/verify.ps1',
-  'scripts/verify-skill.ps1', 'scripts/verify-pressure-scenarios.ps1',
-  'scripts/verify-behavior.ps1', 'scripts/evaluate-model.ps1', 'tests/model-cases.json')
+  'powershell-guardrails/agents/openai.yaml', 'powershell-guardrails/scripts/check-runtime.ps1',
+  'scripts/verify.ps1', 'scripts/verify-skill.ps1', 'scripts/verify-pressure-scenarios.ps1',
+  'scripts/verify-behavior.ps1', 'scripts/evaluate-model.ps1', 'scripts/validate-skill-yaml.py',
+  'tests/model-cases.json')
 foreach ($relativePath in $requiredFiles) {
   if (-not (Test-Path -LiteralPath (Join-Path $repoRoot $relativePath) -PathType Leaf)) {
     throw "Missing required file: $relativePath"
   }
 }
 
-$text = Get-Content -LiteralPath $skillPath -Raw -Encoding UTF8
-$frontmatter = [regex]::Match($text, '\A---\r?\n(?<Body>[\s\S]*?)\r?\n---(?:\r?\n|\z)')
-if (-not $frontmatter.Success) { throw 'SKILL.md needs delimited YAML frontmatter.' }
-
 $python = (Get-Command python -CommandType Application -ErrorAction Stop | Select-Object -First 1).Source
 & $python (Join-Path $repoRoot 'scripts/validate-skill-yaml.py') $skillRoot
 $yamlExit = $LASTEXITCODE
 if ($yamlExit -ne 0) { throw 'Full YAML validation failed; Python and PyYAML are required.' }
 
-$documents = @(Get-ChildItem -LiteralPath $skillRoot -Recurse -File -Filter '*.md') +
-  @(Get-Item -LiteralPath (Join-Path $repoRoot 'README.md'), (Join-Path $repoRoot 'tests/pressure-scenarios.md'))
+$sourceRoots = @($skillRoot, (Join-Path $repoRoot 'scripts'), (Join-Path $repoRoot 'tests'), (Join-Path $repoRoot 'docs'))
+$documents = @(Get-Item -LiteralPath (Join-Path $repoRoot 'README.md')) + @(
+  foreach ($sourceRoot in $sourceRoots) {
+    if (Test-Path -LiteralPath $sourceRoot) { Get-ChildItem -LiteralPath $sourceRoot -Recurse -File -Filter '*.md' }
+  }
+)
 foreach ($document in $documents) {
   $content = Get-Content -LiteralPath $document.FullName -Raw -Encoding UTF8
   if ($content -match '\[(?:TODO|TBD):') { throw "Unfinished scaffold: $($document.Name)" }
@@ -55,8 +46,13 @@ foreach ($document in $documents) {
     if ($parseErrors.Count -gt 0) { throw "Invalid PowerShell example in $($document.Name): $($parseErrors[0].Message)" }
   }
 }
-$scriptFiles = @(Get-ChildItem -LiteralPath (Join-Path $repoRoot 'scripts') -Filter '*.ps1' -File) +
-  @(Get-ChildItem -LiteralPath (Join-Path $skillRoot 'scripts') -Filter '*.ps1' -File)
+$scriptFiles = @(
+  foreach ($sourceRoot in $sourceRoots) {
+    if (Test-Path -LiteralPath $sourceRoot) {
+      Get-ChildItem -LiteralPath $sourceRoot -Recurse -File | Where-Object Extension -in @('.ps1', '.psm1', '.psd1')
+    }
+  }
+)
 foreach ($scriptFile in $scriptFiles) {
   $parseTokens = $null
   $parseErrors = $null
