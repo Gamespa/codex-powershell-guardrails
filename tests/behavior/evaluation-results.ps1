@@ -35,12 +35,29 @@ $record = Get-EvaluationResult @options -AnswerText ($valid.Replace('Get-Item .'
 Assert-Behavior ($record.syntaxErrors.Count -gt 0 -and $record.status -eq 'response-check-failed') 'Invalid PowerShell syntax passed.'
 $options.Mode = 'implicit'
 $record = Get-EvaluationResult @options -AnswerText $valid
-Assert-Behavior ($record.status -eq 'completed' -and $record.triggerCorrect -eq $false) 'Trigger mismatch should remain a completed result with false metric.'
+Assert-Behavior ($record.status -eq 'completed' -and $record.discoveryCorrect -eq $false) 'Trigger mismatch should remain a completed result with false metric.'
 $processResult.Stdout = $trace
 $record = Get-EvaluationResult @options -AnswerText $valid
-Assert-Behavior ($record.skillRead -and $record.referenceReads.Count -eq 1 -and $record.unverifiedReads.Count -eq 1 -and $record.status -eq 'read-evidence-unverified') 'Trace evidence was misclassified.'
+Assert-Behavior ($record.entrypoint.level -eq 'metadata-only' -and @($record.fileReads | Where-Object { $_.path -eq 'references/runtime.md' -and $_.level -eq 'partial-body' }).Count -eq 1 -and $record.unverifiedReads.Count -eq 1 -and $record.status -eq 'read-evidence-unverified') 'Trace evidence was misclassified.'
 Assert-Behavior ($record.usage.input_tokens -eq 12) 'Usage record lost.'
-Assert-Behavior ($null -eq $record.triggerCorrect) 'Invalid read evidence produced a trigger score.'
+Assert-Behavior ($null -eq $record.discoveryCorrect) 'Invalid read evidence produced a trigger score.'
+$processResult.Stdout = @{ type = 'item.completed'; item = @{ type = 'command_execution'
+  command = 'Get-Content .agents/skills/powershell-guardrails/SKILL.md -Head 2'
+  status = 'completed'; exit_code = 0; aggregated_output = "---`nname: powershell-guardrails" }
+} | ConvertTo-Json -Depth 6 -Compress
+$record = Get-EvaluationResult @options -AnswerText $valid
+Assert-Behavior ($record.discoveryCorrect -eq $true -and $record.entrypoint.level -eq 'metadata-only' -and $record.entrypoint.bodyCoverage.fraction -eq 0) 'Discovery was conflated with body loading.'
+$case.shouldTrigger = $false
+$record = Get-EvaluationResult @options -AnswerText $valid
+Assert-Behavior ($record.discoveryCorrect -eq $false) 'Unnecessary metadata read passed the negative discovery control.'
+$case.shouldTrigger = $true
+$case.prompt = 'Use powershell-guardrails to review command'
+$record = Get-EvaluationResult @options -AnswerText $valid
+Assert-Behavior ($record.invocationKind -eq 'explicit' -and $null -eq $record.discoveryCorrect) 'Explicit invocation contaminated implicit discovery.'
+$case.prompt = 'Review command'
+$serialized = ConvertTo-EvaluationJson -Records @($record) | ConvertFrom-Json -NoEnumerate
+Assert-Behavior ($serialized[0].entrypoint.attempts[0].verified -and $serialized[0].entrypoint.attempts[0].endLine -eq 2 -and
+    $null -eq $serialized[0].PSObject.Properties['skillRead'] -and $null -eq $serialized[0].PSObject.Properties['triggerCorrect']) 'New evidence contract was truncated or legacy metrics survived.'
 $processResult.Stdout = ''
 $processResult.Stderr = 'SKILL.md blocked by policy'
 $options.Mode = 'discovery'
@@ -51,7 +68,7 @@ $processResult.Stdout = '{"type":"item.completed","item":{"type":"command_execut
 foreach ($mode in @('discovery', 'implicit')) {
   $options.Mode = $mode
   $record = Get-EvaluationResult @options -AnswerText $valid
-  Assert-Behavior ($record.status -eq 'candidate-read-rejected' -and $record.candidateReadRejected -and $null -eq $record.triggerCorrect) "Structured rejection passed in $mode mode."
+  Assert-Behavior ($record.status -eq 'candidate-read-rejected' -and $record.candidateReadRejected -and $null -eq $record.discoveryCorrect) "Structured rejection passed in $mode mode."
   $processResult.Stdout = $processResult.Stdout.Replace('blocked by policy', 'file read failed')
   $record = Get-EvaluationResult @options -AnswerText $valid
   Assert-Behavior ($record.status -eq 'read-evidence-unverified') "Failed read passed in $mode mode."

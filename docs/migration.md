@@ -8,7 +8,13 @@ installed copies and user configuration are not updated by this refactor.
 
 `results.json` is always a JSON array, including a single run. Consumers that
 previously treated one run as an object must select its array element instead.
-Existing fields and statuses remain. Diagnostic fields include:
+Read-evidence fields have a breaking change: `skillRead`, `referenceReads`, and
+`triggerCorrect` are removed. Use `entrypoint` and `fileReads` for structured
+per-file coverage and attempts, and `discoveryCorrect` for implicit discovery.
+Metadata-only reads can establish discovery but cannot establish body loading;
+check `entrypoint.level` for that. Explicit mentions are excluded from the
+discovery metric. See [the evidence contract](evaluation.md) for levels and ranges.
+Other diagnostic fields include:
 
 - `responseErrors`: validation messages for malformed JSON, missing answers,
   or invalid answer fields.
@@ -19,7 +25,7 @@ Existing fields and statuses remain. Diagnostic fields include:
 Discovery now applies the same structured read-evidence checks as implicit mode.
 Relative paths must resolve from the supplied workspace or event `cwd`; matching
 a filename or prose mention is insufficient. Failed reads remain recorded even if
-a later attempt succeeds. Invalid evidence leaves `triggerCorrect` null. Callers
+a later attempt succeeds. Invalid evidence leaves `discoveryCorrect` null. Callers
 of `Get-SkillReadEvidence` should supply `-Workspace` for relative paths, or use
 fully qualified paths. `-TracePath` supports reading complete JSONL logs from disk.
 

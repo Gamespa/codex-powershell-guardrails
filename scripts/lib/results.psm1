@@ -12,8 +12,8 @@ function Get-EvaluationResult {
     status = 'unavailable'; routeCorrect = $null; routeTotal = $null
     syntaxErrors = @(); missingIds = @(); duplicateIds = @(); unexpectedIds = @(); usage = $null
     candidateReadRejected = $false
-    caseIds = @($cases.id); skillRead = $null; referenceReads = @(); unverifiedReads = @()
-    triggerCorrect = $null; rejectedReads = @(); unresolvedReads = @()
+    caseIds = @($cases.id); entrypoint = $null; fileReads = @(); unverifiedReads = @()
+    discoveryCorrect = $null; rejectedReads = @(); unresolvedReads = @()
     invocationKind = if ($Mode -eq 'implicit' -and $cases[0].prompt -match '(?i)powershell-guardrails') { 'explicit' } else { $Mode }
     answersPath = $AnswerPath; tracePath = $TracePath
     responseErrors = @(); processError = $ProcessResult.Error
@@ -25,8 +25,8 @@ function Get-EvaluationResult {
   $evidence = Get-SkillReadEvidence @evidenceOptions
   $record.usage = $evidence.usage
   if ($evidenceOptions.ContainsKey('SkillRoot')) {
-    $record.skillRead = $evidence.skillRead
-    $record.referenceReads = $evidence.referenceReads
+    $record.entrypoint = $evidence.entrypoint
+    $record.fileReads = $evidence.fileReads
     $record.unverifiedReads = $evidence.unverifiedReads
     $record.rejectedReads = $evidence.rejectedReads
     $record.unresolvedReads = $evidence.unresolvedReads
@@ -53,7 +53,10 @@ function Get-EvaluationResult {
   $record.status = 'completed'
   if ($record.candidateReadRejected) { $record.status = 'candidate-read-rejected' }
   elseif ($record.unverifiedReads.Count -or $record.unresolvedReads.Count) { $record.status = 'read-evidence-unverified' }
-  elseif ($Mode -eq 'implicit' -and $Run.Variant -ne 'none') { $record.triggerCorrect = $evidence.skillRead -eq $cases[0].shouldTrigger }
+  elseif ($Mode -eq 'implicit' -and $Run.Variant -ne 'none' -and $record.invocationKind -ne 'explicit') {
+    $record.discoveryCorrect = $null -ne $evidence.entrypoint -and
+      $evidence.entrypoint.verifiedRead -eq $cases[0].shouldTrigger
+  }
   try {
     if (-not $AnswerExists) { throw 'Answer file is missing.' }
     $response = ConvertFrom-Json -InputObject $AnswerText -AsHashtable -NoEnumerate -ErrorAction Stop

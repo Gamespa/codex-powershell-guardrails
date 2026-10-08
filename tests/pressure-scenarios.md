@@ -20,7 +20,8 @@ Do not require explanations of every parser or redundant tool-resolution probes.
    Preserve JSONL traces, commands, elapsed time, and exposed token usage.
 4. Independent activation mode runs one case per fresh process/workspace without
    a candidate-loading instruction. Separate explicit mentions from implicit cases.
-   Inspect completed read evidence and references, including unverified reads;
+  Inspect per-file body coverage and attempts, separately from discovery;
+  metadata-only reads do not establish instruction loading. Include unverified reads;
    missing evidence from unsupported tool protocols needs manual trace review.
 
 The repository's `tests/model-cases.json` separates prompts from expected

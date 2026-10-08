@@ -62,21 +62,46 @@ pwsh -NoLogo -NoProfile -NonInteractive -File .\scripts\evaluate-model.ps1 -Mode
 ```
 
 Use `-CaseIds` to select cases and `-Repeats` to repeat samples. `results.json`
-records `skillRead`, `triggerCorrect`, `referenceReads`, `unverifiedReads`,
-`rejectedReads`, and `unresolvedReads`. Evidence requires a completed shell read
-with zero exit status, a path resolving to the actual candidate file, and manifest
-or reference content in its output. The parser supports literal PowerShell
-`Get-Content` reads (including aliases), literal location changes, and literal
-PowerShell `-Command` wrappers. Relative paths use the evaluation workspace or
-the event's explicit `cwd`; dynamic expressions and unsupported read forms stay
-unverified. Command text is parsed, never executed by the analyzer.
+records `entrypoint`, `fileReads`, `discoveryCorrect`, `unverifiedReads`,
+`rejectedReads`, and `unresolvedReads`. `entrypoint` is the SKILL.md evidence;
+`fileReads` includes every candidate Markdown, helper, and YAML file. Each contains:
+
+- `path` and `verifiedRead`: whether an attributable, successful read returned
+  the expected nonempty content. This can be metadata alone.
+- `level`: `none`, `metadata-only`, `partial-body`, `full-body`, or `unverified`.
+- `bodyCoverage`: `coveredLines`, `totalLines`, and `fraction` (0 to 1, or null
+  for an empty body). Coverage counts nonblank source lines, excluding SKILL.md
+  frontmatter. Other candidate files treat all content as body.
+- `attempts`: trace line, command, one-based inclusive source range, verification
+  result, and failure reason. Unsupported commands also remain in `unresolvedReads`.
+
+Evidence requires a completed shell read with zero exit status and an exact
+output match against the actual candidate file's requested range. Only CRLF/LF
+and terminal newlines are normalized; case and substantive whitespace matter.
+The parser supports literal `Get-Content` reads (including aliases), `-Raw`,
+literal `-TotalCount`/`-Head`/`-First` or `-Tail`/`-Last` counts, literal location
+changes, and simple literal PowerShell `-Command` wrappers. Relative paths use
+the workspace or event `cwd`. Verified ranges from separate events accumulate
+without double-counting. Reading only the first two manifest lines yields
+`metadata-only`; a truncated full-read output yields `unverified`, not full coverage.
+
+Each command event must have a single attributable file read. Multiple files,
+extra output-producing commands, pipelines, redirections, dynamic expressions,
+unsupported options, and mismatched outputs do not establish coverage. A shared
+heading cannot authenticate several files. Command text is parsed, never executed.
 
 Both discovery and implicit runs reject failed or unverified candidate reads.
 This includes candidate Markdown, PowerShell helpers, and YAML metadata; a helper
-read alone does not count as loading the skill entrypoint.
+read alone does not count as discovering the skill entrypoint.
 Structured command failures identify policy rejection; unattributed stderr is
 reported as unresolved evidence. A later successful read does not erase an earlier
-failure. Invalid evidence leaves `triggerCorrect` null. This extractor does not
+failure. Invalid evidence leaves `discoveryCorrect` null. A later full read may
+raise the coverage level while the earlier failure remains recorded and invalidates
+the run. `discoveryCorrect` compares entrypoint `verifiedRead` with `shouldTrigger`
+only for implicit, non-explicit cases; it measures observed discovery, not complete
+instruction loading. Consult `entrypoint.level` separately for body loading.
+Do not require every supporting reference to be read in full: references are
+loaded on demand. This extractor does not
 cover every possible tool protocol;
 inspect raw traces before interpreting a missing read as a missed trigger. Trigger
 mismatches are recorded as false, rather than being hidden by run completion.

@@ -18,7 +18,9 @@ scope and temporary directory through the common runner. Local process fixtures
 exercise transport, timeout, and failure behavior without authentication or model
 calls. Fixtures cover inherited pipes, bounded previews, and logs visible before
 process completion. Fixed JSONL fixtures cover exact-path read evidence, while
-injected local runners exercise evaluation artifact handling. Separate processes
+injected local runners exercise evaluation artifact handling. Read-evidence tests
+distinguish metadata from body, accumulate exact head/tail ranges, and reject
+truncated, altered, or ambiguously attributed output. Separate processes
 test lock contention, crash release, and concurrent snapshot readers. Python
 unittest covers YAML contracts.
 No additional test framework is required.
