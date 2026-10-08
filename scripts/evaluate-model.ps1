@@ -8,7 +8,8 @@ param(
   [int]$Repeats = 1,
   [int]$TimeoutSeconds = 240,
   [string[]]$CaseIds,
-  [string]$OutputDirectory
+  [string]$OutputDirectory,
+  [string]$SemanticImage
 )
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
@@ -19,5 +20,6 @@ $options = @{
   RepositoryRoot = $repoRoot; Model = $Model; BaselineRef = $BaselineRef
   Mode = $Mode; Variants = $Variants; Repeats = $Repeats; TimeoutSeconds = $TimeoutSeconds
   CaseIds = $CaseIds; OutputDirectory = $OutputDirectory; UserProfile = $env:USERPROFILE
+  SemanticImage = $SemanticImage
 }
 Invoke-ModelEvaluation @options

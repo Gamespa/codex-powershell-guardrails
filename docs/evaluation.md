@@ -30,7 +30,8 @@ backend or fall back to weaker permissions when setup or command execution fails
 The default `provided-content` mode supplies each candidate's entrypoint and technical
 references and helper source directly in the prompt and requests no tools. This
 tests command design with different instructions, not automatic discovery or progressive
-reference loading. Commands are proposed, not executed.
+reference loading. Commands are proposed, not executed unless the separate
+[semantic evaluator](semantic-evaluation.md) is enabled with `-SemanticImage`.
 
 Use `-Mode discovery` for candidates under `.agents/skills`, with Markdown and
 helper-source reads permitted, but no script execution. Inspect traces for
@@ -105,7 +106,8 @@ loaded on demand. This extractor does not
 cover every possible tool protocol;
 inspect raw traces before interpreting a missing read as a missed trigger. Trigger
 mismatches are recorded as false, rather than being hidden by run completion.
-Command semantics still require review against `expectedOutcome`. Model evaluations
+Supported cases can use [executable semantic checks](semantic-evaluation.md);
+remaining semantics still require review against `expectedOutcome`. Model evaluations
 consume account quota and are separate from the local verification chain.
 
 ## Process and artifact lifecycle

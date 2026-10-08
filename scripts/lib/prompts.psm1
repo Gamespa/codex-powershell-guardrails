@@ -1,4 +1,5 @@
 Set-StrictMode -Version Latest
+Import-Module (Join-Path $PSScriptRoot 'semantic-contracts.psm1')
 
 function Get-ResponseSchema {
   @{
@@ -25,6 +26,7 @@ function New-EvaluationPrompt {
     # No candidate name/path or routing instruction may leak into this mode.
     return @"
 $($Cases[0].prompt)
+$(Get-CaseSemanticContract $Cases[0])
 Return one answer for this request with ID $($Cases[0].id) using the response schema.
 Propose commands or a short action description without executing task commands.
 Read supporting instructions if needed. Do not install software, mutate files,
@@ -47,7 +49,9 @@ connect to remote hosts, start services, or delegate.
   } else {
     "Reading the candidate's Markdown and PowerShell source files is allowed; do not execute scripts. No other tool actions are requested."
   }
-  $summary = ConvertTo-Json -InputObject @($Cases | Select-Object id, prompt) -Depth 6
+  $summary = ConvertTo-Json -InputObject @($Cases | ForEach-Object {
+    @{ id = $_.id; prompt = $_.prompt; executionContract = Get-CaseSemanticContract $_ }
+  }) -Depth 6
   return @"
 Evaluate independent command-design cases. $candidate
 Return one answer for every ID in the supplied schema. Keep rationale to one sentence.

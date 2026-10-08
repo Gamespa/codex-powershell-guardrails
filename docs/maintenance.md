@@ -23,12 +23,20 @@ distinguish metadata from body, accumulate exact head/tail ranges, and reject
 truncated, altered, or ambiguously attributed output. Separate processes
 test lock contention, crash release, and concurrent snapshot readers. Python
 unittest covers YAML contracts.
+Semantic regression tests run only fixed repository-owned good and bad commands
+locally; their runner rejects other sources. Container lifecycle tests mock Docker.
+Model-generated answers require the isolated backend described in
+[semantic evaluation](semantic-evaluation.md), never the offline host runner.
 No additional test framework is required.
 
 When changing a decision boundary, consult
 [tests/pressure-scenarios.md](../tests/pressure-scenarios.md). Run `scripts/verify.ps1`
 for structural checks and executable regressions. A repository verification
 pass does not establish model behavior; comparisons remain a separate check.
+When adding a semantic validator, define its public input/output contract, include
+an executable correct answer and a realistic wrong answer, vary fixture data, and
+increment its version when assertions change. Keep infrastructure errors separate
+from answer failures. Validate a real container backend separately from mocks.
 
 Keep only constraints that affect decisions in the entrypoint; route conditional
 detail to the relevant reference. Do not lock verification to exact headings,

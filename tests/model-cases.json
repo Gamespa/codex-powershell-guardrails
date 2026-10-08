@@ -18,14 +18,22 @@
     "shouldTrigger": true,
     "language": "powershell",
     "prompt": "On Windows with pwsh 7.6.x in Windows native argument mode, pass an empty string and a literal a\"b as separate arguments to a native argument-echo executable. Diagnose why a legacy workaround may change them.",
-    "expectedOutcome": "Preserve empty/quoted arguments; account for native argument mode, not just arrays or indiscriminate --%."
+    "expectedOutcome": "Preserve empty/quoted arguments; account for native argument mode, not just arrays or indiscriminate --%.",
+    "validator": {
+      "id": "native-arguments",
+      "version": 1
+    }
   },
   {
     "id": "windows_rg_file_glob",
     "shouldTrigger": true,
     "language": "powershell",
     "prompt": "On Windows in pwsh 7.6.x, rg -n 'marker' .\\data\\*.json failed with an invalid filename. Search only JSON files under .\\data, including nested folders, and show matching lines.",
-    "expectedOutcome": "Search the directory with rg -g '*.json' (or enumerate concrete files); do not pass the wildcard pathname literally to rg."
+    "expectedOutcome": "Search the directory with rg -g '*.json' (or enumerate concrete files); do not pass the wildcard pathname literally to rg.",
+    "validator": {
+      "id": "json-search",
+      "version": 1
+    }
   },
   {
     "id": "colon_interpolation_recent",
@@ -46,7 +54,11 @@
     "shouldTrigger": true,
     "language": "powershell",
     "prompt": "Search ./fixtures for optional-feature with rg. Report matches, no matches, or an actual search failure separately.",
-    "expectedOutcome": "0=matches, 1=no matches, 2=error; capture native exit immediately."
+    "expectedOutcome": "0=matches, 1=no matches, 2=error; capture native exit immediately.",
+    "validator": {
+      "id": "search-status",
+      "version": 1
+    }
   },
   {
     "id": "secret_metadata",
@@ -144,14 +156,22 @@
     "shouldTrigger": true,
     "language": "powershell",
     "prompt": "On Windows with pwsh 7.6.x, a provisioned native exporter writes a binary archive to stdout. Save exact bytes to archive.bin, with diagnostics in a separate stderr file and checked exit status.",
-    "expectedOutcome": "Direct native stdout redirection or a binary-safe stream; no text cmdlet or stderr merge in the binary path; immediate native exit check."
+    "expectedOutcome": "Direct native stdout redirection or a binary-safe stream; no text cmdlet or stderr merge in the binary path; immediate native exit check.",
+    "validator": {
+      "id": "binary-output",
+      "version": 1
+    }
   },
   {
     "id": "structured_output",
     "shouldTrigger": true,
     "language": "powershell",
     "prompt": "On Windows with pwsh 7.6.x, serialize zero, one, or many report objects as a JSON array. Each item has nested fields four levels deep. A previous Format-Table pipeline produced formatting metadata instead of the reports.",
-    "expectedOutcome": "Serialize original objects with a stable array shape and sufficient depth, without Format-Table; no fixed depth unrelated to the structure."
+    "expectedOutcome": "Serialize original objects with a stable array shape and sufficient depth, without Format-Table; no fixed depth unrelated to the structure.",
+    "validator": {
+      "id": "json-array",
+      "version": 1
+    }
   },
   {
     "id": "literal_bracket_path",

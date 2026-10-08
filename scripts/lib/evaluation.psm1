@@ -1,5 +1,5 @@
 Set-StrictMode -Version Latest
-foreach ($module in @('cases', 'candidates', 'prompts', 'process', 'results', 'artifacts')) {
+foreach ($module in @('cases', 'candidates', 'prompts', 'process', 'results', 'artifacts', 'semantics')) {
   Import-Module (Join-Path $PSScriptRoot "$module.psm1")
 }
 
@@ -8,7 +8,7 @@ function Invoke-ModelEvaluation {
     [ValidateSet('provided-content', 'discovery', 'implicit')][string]$Mode,
     [ValidateSet('none', 'original', 'updated')][string[]]$Variants,
     [int]$Repeats, [int]$TimeoutSeconds, [string[]]$CaseIds, [string]$OutputDirectory,
-    [string]$Executable, [string]$UserProfile,
+    [string]$Executable, [string]$UserProfile, [string]$SemanticImage,
     # Internal seam for offline tests; the public CLI always uses the real runner.
     [scriptblock]$ProcessRunner = { param($exe, $arguments, $prompt, $timeout, $stdoutPath, $stderrPath)
       Invoke-EvaluationProcess -Executable $exe -Arguments $arguments -Prompt $prompt -TimeoutSeconds $timeout -StdoutPath $stdoutPath -StderrPath $stderrPath
@@ -88,15 +88,22 @@ function Invoke-ModelEvaluation {
         AnswerPath = $answerPath; TracePath = $tracePath; CandidateRoot = $candidateRoot; Workspace = $workspace; StderrPath = $stderrPath
       }
       $record = Get-EvaluationResult @resultOptions
+      $answers = if ($record.status -eq 'completed') { @((ConvertFrom-Json -InputObject $answerText).answers) } else { @() }
+      $semantic = Invoke-SemanticEvaluation -Cases $run.Cases -Answers $answers -Image $SemanticImage -OutputDirectory (Join-Path $runRoot 'semantics') -ResponseValid ($record.status -eq 'completed')
+      $record | Add-Member -NotePropertyName semantics -NotePropertyValue $semantic
       $records.Add($record)
       Write-EvaluationSnapshot -Path (Join-Path $outputRoot 'results.json') -Content (ConvertTo-EvaluationJson -Records $records.ToArray())
       Write-Host "Finished $($run.Variant): $($record.status), exit $($record.exitCode)."
+      Write-Host "Semantics: $($semantic.summary.passed) passed, $($semantic.summary.failed) failed, $($semantic.summary.infrastructureErrors) infrastructure errors, $($semantic.summary.notEvaluated) not evaluated."
     }
     Write-Host "Model evaluation artifacts: $outputRoot"
     Write-Host 'Routing is self-reported; syntax checks are not semantic execution. Provided-content mode does not test skill discovery.'
     Write-Host 'Inspect completed read evidence and review commands against expectedOutcome; unsupported read protocols require manual trace review.'
     if (@($records | Where-Object status -ne 'completed').Count -gt 0) {
       throw 'One or more model runs were unavailable or invalid; inspect stderr and results rather than reporting a pass.'
+    }
+    if (@($records | Where-Object { $_.semantics.summary.failed -gt 0 -or $_.semantics.summary.infrastructureErrors -gt 0 }).Count) {
+      throw 'Semantic evaluation failed or its isolated backend was unavailable; inspect semantics in results.json.'
     }
   } finally { $outputLock.Dispose() }
 }

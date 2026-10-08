@@ -64,6 +64,9 @@ regressions, and Git whitespace errors. It does not call models or remote hosts.
   dependencies, and regression coverage.
 - [Model evaluation](docs/evaluation.md): optional quota-consuming comparisons,
   discovery modes, artifacts, and interpretation limits.
+- [Semantic evaluation](docs/semantic-evaluation.md): isolated execution, five
+  behavior validators, coverage and pass-rate reporting; requires a provisioned
+  Windows Hyper-V container backend only when executing model answers.
 - [Migration notes](docs/migration.md): result format and internal file changes.
 - [Maintenance scenarios](tests/pressure-scenarios.md): observable outcomes and
   version-specific historical evidence.

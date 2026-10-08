@@ -23,6 +23,7 @@ foreach ($scenario in @('success', 'late-trace', 'malformed', 'wrongtype', 'miss
   $records = ConvertFrom-Json -InputObject ([IO.File]::ReadAllText((Join-Path $options.OutputDirectory 'results.json'))) -NoEnumerate
   Assert-Behavior ($records -is [array] -and $records.Count -eq 1) 'Workflow did not write a single-run result array.'
   $record = $records[0]
+  Assert-Behavior ($record.semantics.summary.evaluated -eq 0 -and $null -eq $record.semantics.summary.passRate) 'Model-only workflow claimed semantic execution.'
   $expectedStatus = switch ($scenario) { { $_ -in 'success', 'late-trace' } { 'completed' }; { $_ -in 'failure', 'timeout' } { 'unavailable' }; default { 'response-check-failed' } }
   Assert-Behavior ($record.status -eq $expectedStatus) "Unexpected workflow status for $scenario."
   Assert-Behavior ((Get-Content -LiteralPath $record.tracePath -Raw).Contains('turn.completed')) 'Raw trace not preserved.'

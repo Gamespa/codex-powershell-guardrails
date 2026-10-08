@@ -27,7 +27,7 @@ $cases = @(Read-ModelCases $casePath)
 $subset = @(Read-ModelCases $casePath -CaseIds ordinary_git)
 Assert-Behavior ($subset.Count -eq 1 -and -not $subset[0].shouldTrigger) 'Single-case selection lost its negative control.'
 Assert-Throws { Read-ModelCases $casePath -CaseIds unknown_case } 'Unknown case ID'
-foreach ($mutation in @('duplicate', 'missing', 'type', 'path', 'controls', 'shape')) {
+foreach ($mutation in @('duplicate', 'missing', 'type', 'path', 'controls', 'shape', 'validator', 'validator-version', 'validator-extra')) {
   $invalid = @(Get-Content -LiteralPath $casePath -Raw | ConvertFrom-Json)
   switch ($mutation) {
     'duplicate' { $invalid[1].id = $invalid[0].id }
@@ -36,9 +36,12 @@ foreach ($mutation in @('duplicate', 'missing', 'type', 'path', 'controls', 'sha
     'path' { $invalid[0].id = '../escape' }
     'controls' { $invalid = @($invalid | Where-Object shouldTrigger) }
     'shape' { $invalid = $invalid[0] }
+    'validator' { ($invalid | Where-Object id -eq 'modern_native_quotes').validator.id = 'unknown-validator' }
+    'validator-version' { ($invalid | Where-Object id -eq 'modern_native_quotes').validator.version = 2 }
+    'validator-extra' { ($invalid | Where-Object id -eq 'modern_native_quotes').validator | Add-Member -NotePropertyName script -NotePropertyValue 'untrusted.ps1' }
   }
   $invalidPath = Write-Fixture "$mutation.json" (ConvertTo-Json -InputObject $invalid -Depth 8)
-  Assert-Throws { Read-ModelCases $invalidPath } 'case|Case|controls|boolean'
+  Assert-Throws { Read-ModelCases $invalidPath } 'case|Case|controls|boolean|validator'
 }
 foreach ($mode in @('provided-content', 'discovery', 'implicit')) {
   $runs = @(Get-EvaluationRuns -Cases $cases -Mode $mode -Variants none,original,updated -Repeats 2)
@@ -65,6 +68,10 @@ Assert-Behavior ($PSNativeCommandUseErrorActionPreference -eq $nativeBefore) 'Ca
 $provided = New-EvaluationPrompt -Cases $subset -Mode provided-content -Variant updated -Bundle $updated
 Assert-Behavior ($provided.Contains('<candidate-skill>') -and $provided.Contains('Do not call any tools')) 'Provided-content prompt lost its content or tool boundary.'
 Assert-Behavior (-not $provided.Contains($subset[0].expectedOutcome)) 'Expected outcome leaked into prompt.'
+$semanticCase = @($cases | Where-Object id -eq 'modern_native_quotes')
+$semanticPrompt = New-EvaluationPrompt -Cases $semanticCase -Mode implicit -Variant updated -Bundle $updated
+Assert-Behavior ($semanticPrompt.Contains('$nativeExecutable') -and $semanticPrompt.Contains('$argumentValues') -and
+    -not $semanticPrompt.Contains($semanticCase[0].expectedOutcome) -and $semanticPrompt -notmatch '1729|7919') 'Execution interface was omitted or expected fixture values leaked into prompt.'
 $discovery = New-EvaluationPrompt -Cases $subset -Mode discovery -Variant updated -Bundle $updated
 Assert-Behavior ($discovery.Contains('.agents/skills/powershell-guardrails') -and -not $discovery.Contains('<candidate-skill>')) 'Discovery prompt supplied content instead of routing.'
 $implicit = New-EvaluationPrompt -Cases $subset -Mode implicit -Variant updated -Bundle $updated

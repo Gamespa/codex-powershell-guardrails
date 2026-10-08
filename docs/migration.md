@@ -6,6 +6,14 @@ installed copies and user configuration are not updated by this refactor.
 
 ## Evaluation results
 
+Model results now also contain `semantics.cases` and `semantics.summary`. The
+existing run status still describes generation and response checks. Semantic
+failures and infrastructure errors are separate and fail the CLI when requested.
+`-SemanticImage` opts into isolated execution; the default is `not-evaluated`.
+The new `scripts/evaluate-semantics.ps1` evaluates saved answers without a model
+call. Five cases now append public execution contracts, so rerun all comparison
+arms before comparing semantic rates. See [semantic evaluation](semantic-evaluation.md).
+
 `results.json` is always a JSON array, including a single run. Consumers that
 previously treated one run as an object must select its array element instead.
 Read-evidence fields have a breaking change: `skillRead`, `referenceReads`, and
