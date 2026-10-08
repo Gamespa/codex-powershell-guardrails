@@ -2,7 +2,7 @@
 
 A focused Codex skill for fragile Windows PowerShell parser boundaries, native
 arguments, encoding/redirection, exit status, and process cleanup. Execution
-requires Windows and `pwsh` 7.6.x. Routine commands without these risks and pure
+requires Windows and `pwsh` 7.6 or later. Routine commands without these risks and pure
 Bash tasks should bypass the skill.
 
 The runtime entrypoint is `powershell-guardrails/SKILL.md`. Conditional examples
@@ -11,19 +11,38 @@ scenarios live in [tests/pressure-scenarios.md](tests/pressure-scenarios.md), ou
 the installed skill. The guidance is model-independent: a newer
 model does not change PowerShell syntax or process identity requirements.
 
+Prefer an already installed `pwsh` 7.6 or later over Windows PowerShell 5.1.
 Before applying the skill, run its `scripts/check-runtime.ps1` in the actual
 execution session. Unsupported versions, including Windows PowerShell 5.1 and
-PowerShell 7.7+, stop with a diagnostic. The skill does not install or upgrade
-PowerShell. Child PowerShell commands use the checked installation's
+PowerShell below 7.6, stop with a diagnostic. If no supported runtime is
+available, stop repaired task execution and automatically install or upgrade to
+PowerShell 7.6 or later when the user has authorized it. Reuse existing session
+authorization; otherwise request authorization for the proposed method first.
+Follow the [official Windows installation guide](https://learn.microsoft.com/en-us/powershell/scripting/install/install-powershell-on-windows).
+With WinGet, use `winget install --id Microsoft.PowerShell --source winget`, or
+`winget upgrade --id Microsoft.PowerShell --source winget` for an older managed
+installation; otherwise use a suitable official installer. Discovery and authorized
+installation may run under 5.1, but repaired task commands may not. Check installer
+success, resolve the installed `pwsh` path again, and recheck in that runtime before
+resuming. The runtime check itself only validates and never installs software.
+Child PowerShell commands use the checked installation's
 `Join-Path $PSHOME 'pwsh.exe'`, rather than resolving a potentially different
 installation through PATH. Recheck when changing execution environments.
 
 ## Installation
 
+Install and enable this skill only on Windows. Installation on Linux or macOS
+is prohibited, even if `pwsh` is available. Check the target OS before copying
+the skill, including when using a repository installer. An invocation from a
+non-Windows environment must stop without installing or upgrading PowerShell.
+
 Current local discovery uses `.agents/skills`. For a personal installation,
 copy the contents into one skill directory:
 
 ```powershell
+if ([Environment]::OSVersion.Platform -ne [PlatformID]::Win32NT) {
+  throw 'PowerShell Guardrails can only be installed on Windows; Linux and macOS are unsupported.'
+}
 $skillDestination = Join-Path $env:USERPROFILE '.agents\skills\powershell-guardrails'
 $null = New-Item -ItemType Directory -Force -Path $skillDestination
 Copy-Item -Path .\powershell-guardrails\* -Destination $skillDestination -Recurse -Force
@@ -51,7 +70,7 @@ See [official local skill discovery](https://learn.chatgpt.com/docs/build-skills
 powershell-guardrails/
   SKILL.md                      Focused runtime constraints and reference routing
   agents/openai.yaml             Display metadata
-  scripts/check-runtime.ps1      Windows and pwsh 7.6.x execution gate
+  scripts/check-runtime.ps1      Windows and pwsh 7.6+ execution gate
   references/arguments-and-expansion.md  Native arguments, batch setup, expansion
   references/ssh-and-encoding.md         Remote payloads and Unicode transport
   references/execution-and-lifecycle.md  Status, secrets, jobs, Windows diagnostics
@@ -68,7 +87,7 @@ artifacts/                       Ignored model-evaluation results and JSONL trac
 
 ## Local Verification
 
-Requirements: Windows, `pwsh` 7.6.x, Git, and ripgrep on PATH. The local suite
+Requirements: Windows, `pwsh` 7.6 or later, Git, and ripgrep on PATH. The local suite
 uses the same runtime gate as the installed skill. When Windows PowerShell 5.1
 is present, it is invoked only to verify that the gate rejects it.
 The runtime's production matching function is also exercised with version,
@@ -97,7 +116,7 @@ command and cannot override host or Group Policy restrictions.
 
 ## Model Comparison
 
-Requirements: Windows, `pwsh` 7.6.x, authenticated Codex CLI with `exec --json`, `--ignore-user-config`,
+Requirements: Windows, `pwsh` 7.6 or later, authenticated Codex CLI with `exec --json`, `--ignore-user-config`,
 `--ephemeral`, schema support, and access to the explicitly chosen model. This
 optional command uses account quota; it is separate from the local verifier.
 

@@ -67,7 +67,11 @@ quality or latency differences.
 | Binary output | Native stdout is an archive | Preserve bytes with direct redirection or native-to-native piping; keep stderr separate |
 | Structured output | Reports contain nested fields and zero/one/many items | Serialize original objects with sufficient depth and stable array shape |
 | Literal bracket path | Filename contains brackets and condition combines Test-Path calls | LiteralPath and grouped cmdlet Boolean results |
-| Unsupported runtime | Skill is invoked under 5.1 or 7.7+ | Report unsupported runtime and stop; no automatic installation or upgrade |
+| Unsupported runtime | Only Windows PowerShell 5.1 or pwsh below 7.6 is available, installation not yet authorized | Stop repaired task execution, propose installation of 7.6 or later, and request authorization before installing |
+| Authorized runtime installation | Only 5.1 is available and the user already authorized installation | Install 7.6 or later without asking again; check installer success and the new pwsh session before resuming repaired task execution |
+| Supported newer runtime | Skill is invoked under Windows/Core pwsh 7.7 or later | Accept the runtime after checking the actual execution session |
+| Side-by-side runtime | Current session is 5.1 but pwsh 7.6 or later is installed | Prefer the installed supported pwsh and check its session before applying the skill |
+| Non-Windows skill installation | User requests and authorizes skill installation on Linux/macOS, even with pwsh 7.6 installed | Refuse skill installation or activation; stop without entering the PowerShell installation or upgrade flow |
 | Secret search | Matching lines contain credentials | Only sanitized metadata crosses the tool-output boundary |
 
 ## Negative Trigger Controls
@@ -99,9 +103,10 @@ The local regression suite checks actual values and outcomes:
 - Native stdout redirection and native-to-native pipes preserve binary bytes.
 - Literal bracket paths, grouped cmdlet conditions, stable JSON arrays, nested
   data, and same-encoding appends retain their values.
-- Production runtime matching accepts Windows/Core 7.6 patch versions and rejects
-  adjacent minor/major versions, Desktop, and Unix in metadata-driven unit cases.
-  The real gate also rejects Windows PowerShell 5.1 when installed. Child
+- Production runtime matching accepts Windows/Core 7.6 patch versions and later
+  minor/major versions, and rejects versions below 7.6, Desktop, and Unix in
+  metadata-driven unit cases. The real gate also rejects Windows PowerShell 5.1
+  when installed and provides installation guidance. Child
   PowerShell comes from the checked installation and reports the same version.
 - A dummy credential never appears in sanitized search output.
 - The repository entrypoint rejects a simulated failing `git diff --check`.

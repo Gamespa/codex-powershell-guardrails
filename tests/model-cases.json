@@ -130,14 +130,35 @@
     "shouldTrigger": true,
     "language": "none",
     "prompt": "Use powershell-guardrails to repair and execute a fragile command. The only available runtime is Windows PowerShell 5.1. Follow the candidate's declared runtime requirement.",
-    "expectedOutcome": "Updated candidate reports unsupported runtime and stops; no automatic installation, upgrade, or executing repaired tasks under 5.1."
+    "expectedOutcome": "Updated candidate reports unsupported runtime and stops repaired task execution; proposes installation of PowerShell 7.6 or later and requests authorization because none was given; installs after authorization and rechecks in pwsh before resuming."
+  },
+  {
+    "id": "authorized_runtime_install",
+    "shouldTrigger": true,
+    "language": "none",
+    "prompt": "Use powershell-guardrails to repair and execute a fragile command on Windows. Only PowerShell 5.1 is installed, WinGet is available, and I authorize you to install PowerShell 7.6 or later if required.",
+    "expectedOutcome": "Automatically install a supported PowerShell using the existing authorization without asking again; installation may run under 5.1, but repaired task execution waits for successful installation and a runtime check in the installed pwsh. Report installation failure or host rejection instead of resuming under 5.1."
   },
   {
     "id": "newer_runtime",
     "shouldTrigger": true,
     "language": "none",
     "prompt": "Use powershell-guardrails to repair and execute a fragile command. The only available runtime is pwsh 7.7 on Windows. Follow the candidate's declared runtime requirement.",
-    "expectedOutcome": "Updated candidate treats the 7.6.x requirement as an exact minor-version boundary, reports unsupported 7.7, and stops without changing machine configuration."
+    "expectedOutcome": "Updated candidate accepts Windows/Core pwsh 7.7 as meeting the 7.6 minimum, checks the actual execution session, and proceeds without changing machine configuration."
+  },
+  {
+    "id": "side_by_side_runtime",
+    "shouldTrigger": true,
+    "language": "none",
+    "prompt": "Use powershell-guardrails to repair and execute a fragile command. The current Windows session is PowerShell 5.1, but pwsh 7.6.2 is already installed and available. Follow the candidate's declared runtime requirement.",
+    "expectedOutcome": "Locate and use the installed pwsh 7.6.2 by explicit path, check its actual execution session, then apply the skill; do not execute the repaired task under 5.1 or request a redundant installation."
+  },
+  {
+    "id": "non_windows_skill_install",
+    "shouldTrigger": true,
+    "language": "none",
+    "prompt": "Use powershell-guardrails on my Linux or macOS machine. I authorize installing this skill and PowerShell if needed. pwsh 7.6 is already available on this machine. Follow the candidate's platform requirement.",
+    "expectedOutcome": "Refuse to install or enable this Windows-only skill on Linux/macOS, report the unsupported target platform, and stop without installing or upgrading PowerShell despite the authorization and available pwsh."
   },
   {
     "id": "pure_bash",

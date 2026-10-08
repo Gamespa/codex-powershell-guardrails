@@ -1,6 +1,6 @@
 ---
 name: powershell-guardrails
-description: Prevent and fix fragile PowerShell 7.6 commands on Windows involving parser boundaries, native arguments, encoding or redirection, exit status, or process cleanup.
+description: Prevent and fix fragile PowerShell 7.6+ commands on Windows involving parser boundaries, native arguments, encoding or redirection, exit status, or process cleanup.
 ---
 
 # PowerShell Guardrails
@@ -11,11 +11,35 @@ still applies.
 
 ## Runtime
 
-Execute this skill's commands only on Windows with `pwsh` 7.6.x. Run
+Windows only: do not install or enable this skill on Linux or macOS.
+Check the target platform before installing the skill or preparing its runtime.
+If invoked on a non-Windows platform, report that it is unsupported and stop;
+do not enter the PowerShell installation or upgrade flow there.
+
+Execute repaired task commands only on Windows with `pwsh` 7.6 or later. Prefer
+an already installed supported `pwsh` over Windows PowerShell 5.1; if the current
+session is unsupported, locate an available `pwsh` (via `Get-Command pwsh
+-CommandType Application -All` or a known installation path) and use its explicit
+path to start a supported session. Run
 [the runtime check](scripts/check-runtime.ps1) once in the actual execution
-session before applying the guidance. Stop on an unsupported runtime and report
-the detected version; use an already available 7.6.x runtime if appropriate.
-Do not install, upgrade, or substitute `powershell.exe` from this skill.
+session before applying the guidance. If no supported runtime is available,
+stop executing repaired task commands and report the detected version or missing `pwsh`.
+If the user has authorized installation or upgrade, install PowerShell 7.6 or
+later automatically; honor authorization already given in the session without
+asking again. Otherwise, request authorization with the proposed installation
+method, then perform the installation when authorized. Use the
+[official Windows installation guide](https://learn.microsoft.com/en-us/powershell/scripting/install/install-powershell-on-windows).
+When WinGet is available, run `winget install --id Microsoft.PowerShell --source winget`
+for a missing installation, or `winget upgrade --id Microsoft.PowerShell --source winget`
+for an older WinGet-managed installation. Otherwise, download and run a suitable
+official installer from the guide within the authorized scope. Check the installer's
+exit status and confirm the installed version meets the minimum; installation
+failure or host rejection stops this path. Report any required user action.
+Runtime discovery and authorized installation may run from Windows PowerShell 5.1;
+this exception does not permit running repaired task commands there.
+After installation, resolve the installed `pwsh` path again (the current PATH may
+be stale), start that executable, and rerun the runtime check before resuming.
+Do not substitute `powershell.exe` for the supported task runtime.
 For child PowerShell, use `Join-Path $PSHOME 'pwsh.exe'` to keep the checked
 installation. Recheck when switching to a different execution environment.
 
