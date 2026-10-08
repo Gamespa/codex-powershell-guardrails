@@ -8,6 +8,22 @@ if ($Scenario -eq 'streams') {
   [Console]::Error.Write(('e' * 131072))
   exit
 }
+if ($Scenario -eq 'hold-pipes') {
+  $info = [Diagnostics.ProcessStartInfo]::new((Join-Path $PSHOME 'pwsh.exe'))
+  $info.UseShellExecute = $false
+  $info.CreateNoWindow = $true
+  foreach ($argument in @('-NoLogo', '-NoProfile', '-NonInteractive', '-Command', '[Console]::Out.WriteLine("inherited-output"); Start-Sleep -Seconds 30')) {
+    $info.ArgumentList.Add($argument)
+  }
+  $child = [Diagnostics.Process]::Start($info)
+  try {
+    $identity = @{ Id = $child.Id; StartTime = $child.StartTime.ToUniversalTime().Ticks; Executable = $info.FileName } | ConvertTo-Json
+    [IO.File]::WriteAllText($AnswerPath, $identity)
+  } finally { $child.Dispose() }
+  [Console]::Out.WriteLine('parent-exiting')
+  exit
+}
+if ($Scenario -eq 'late-trace') { [Console]::Out.WriteLine(('x' * 131072)) }
 [Console]::Out.WriteLine('{"type":"turn.completed","usage":{"input_tokens":12,"output_tokens":6}}')
 [Console]::Error.WriteLine('fixture diagnostic')
 if ($Scenario -eq 'timeout') { Start-Sleep -Seconds 30; exit }

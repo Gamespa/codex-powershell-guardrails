@@ -26,5 +26,6 @@ function Assert-Throws {
   param([scriptblock]$Action, [string]$Pattern)
   $caught = $null
   try { & $Action } catch { $caught = $_ }
-  Assert-Behavior ($null -ne $caught -and $caught.Exception.Message -match $Pattern) "Expected failure: $Pattern"
+  $actual = if ($caught) { $caught.Exception.Message } else { 'no exception' }
+  Assert-Behavior ($null -ne $caught -and $caught.Exception.Message -match $Pattern) "Expected failure: $Pattern; got: $actual"
 }

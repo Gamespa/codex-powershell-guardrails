@@ -9,14 +9,18 @@ constraints and reference selection.
 Repository command entrypoints delegate to internal modules in `scripts/lib/`.
 Cases and candidate bundles are validated before model execution. Prompt and
 result functions transform explicit inputs; the process helper manages a single
-child, and evaluation orchestration owns artifact writes and progress reporting.
+child and streams its logs. Evaluation orchestration owns artifact paths and
+progress reporting; the artifact module handles locks and atomic result snapshots.
 Importing modules does not launch a model or create files.
 
 Offline PowerShell suites live in `tests/behavior/`. Each suite gets an isolated
 scope and temporary directory through the common runner. Local process fixtures
 exercise transport, timeout, and failure behavior without authentication or model
-calls. Fixed JSONL fixtures cover read evidence, while injected local runners
-exercise evaluation artifact handling. Python unittest covers YAML contracts.
+calls. Fixtures cover inherited pipes, bounded previews, and logs visible before
+process completion. Fixed JSONL fixtures cover exact-path read evidence, while
+injected local runners exercise evaluation artifact handling. Separate processes
+test lock contention, crash release, and concurrent snapshot readers. Python
+unittest covers YAML contracts.
 No additional test framework is required.
 
 When changing a decision boundary, consult

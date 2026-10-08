@@ -62,13 +62,47 @@ pwsh -NoLogo -NoProfile -NonInteractive -File .\scripts\evaluate-model.ps1 -Mode
 ```
 
 Use `-CaseIds` to select cases and `-Repeats` to repeat samples. `results.json`
-records `skillRead`, `triggerCorrect`, `referenceReads`, and `unverifiedReads`.
-Evidence requires a completed shell read with zero exit status and manifest or
-reference content in its output. Failed or unverified attempted reads invalidate
-the run. This extractor covers common shell reads, not all possible tool protocols;
+records `skillRead`, `triggerCorrect`, `referenceReads`, `unverifiedReads`,
+`rejectedReads`, and `unresolvedReads`. Evidence requires a completed shell read
+with zero exit status, a path resolving to the actual candidate file, and manifest
+or reference content in its output. The parser supports literal PowerShell
+`Get-Content` reads (including aliases), literal location changes, and literal
+PowerShell `-Command` wrappers. Relative paths use the evaluation workspace or
+the event's explicit `cwd`; dynamic expressions and unsupported read forms stay
+unverified. Command text is parsed, never executed by the analyzer.
+
+Both discovery and implicit runs reject failed or unverified candidate reads.
+This includes candidate Markdown, PowerShell helpers, and YAML metadata; a helper
+read alone does not count as loading the skill entrypoint.
+Structured command failures identify policy rejection; unattributed stderr is
+reported as unresolved evidence. A later successful read does not erase an earlier
+failure. Invalid evidence leaves `triggerCorrect` null. This extractor does not
+cover every possible tool protocol;
 inspect raw traces before interpreting a missing read as a missed trigger. Trigger
 mismatches are recorded as false, rather than being hidden by run completion.
 Command semantics still require review against `expectedOutcome`. Model evaluations
 consume account quota and are separate from the local verification chain.
+
+## Process and artifact lifecycle
+
+Stdout and stderr stream to `trace.jsonl` and `stderr.txt` while the child runs.
+The process helper retains at most 64 KiB per stream as an in-memory diagnostic
+preview; result analysis reads complete log files one line at a time. Individual
+JSONL events are still parsed in memory. A process timeout or parent exit starts
+a bounded cleanup/drain period (two seconds by default). An inherited pipe cannot
+make the evaluator wait indefinitely. Drain timeout retains partial logs and
+invalidates the run. If the parent already exited, surviving descendants are
+reported for inspection; the runner does not kill processes by a stale parent PID.
+
+An OS-backed exclusive handle on `.evaluation.lock` protects each output directory
+before checking or creating run artifacts. A competing evaluator fails before
+launching its model. The lock file remains after release; the OS releases ownership
+when its process exits, including a crash. Do not delete an active lock file.
+
+`results.json` is flushed to a temporary sibling file and atomically replaced
+after each run. A failed replacement preserves the previous snapshot. Concurrent
+Windows readers should allow delete sharing so they can retain an old file handle
+during replacement. Existing results and run directories still require a fresh
+output directory; releasing a lock does not authorize overwriting prior evidence.
 
 See [official skill evaluation guidance](https://developers.openai.com/blog/eval-skills).

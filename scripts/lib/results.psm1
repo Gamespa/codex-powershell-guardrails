@@ -4,7 +4,7 @@ Import-Module (Join-Path $PSScriptRoot 'trace.psm1')
 function Get-EvaluationResult {
   param($Run, [string]$Model, [string]$BaselineRef, [string]$Mode, $ProcessResult,
     [AllowNull()][string]$AnswerText, [bool]$AnswerExists, [string]$AnswerPath,
-    [string]$TracePath, [string]$CandidateRoot)
+    [string]$TracePath, [string]$CandidateRoot, [string]$Workspace, [string]$StderrPath)
   $cases = $Run.Cases
   $record = [ordered]@{
     variant = $Run.Variant; repeat = $Run.Repeat; model = $Model; baselineRef = $BaselineRef; mode = $Mode
@@ -13,32 +13,47 @@ function Get-EvaluationResult {
     syntaxErrors = @(); missingIds = @(); duplicateIds = @(); unexpectedIds = @(); usage = $null
     candidateReadRejected = $false
     caseIds = @($cases.id); skillRead = $null; referenceReads = @(); unverifiedReads = @()
-    triggerCorrect = $null
+    triggerCorrect = $null; rejectedReads = @(); unresolvedReads = @()
     invocationKind = if ($Mode -eq 'implicit' -and $cases[0].prompt -match '(?i)powershell-guardrails') { 'explicit' } else { $Mode }
     answersPath = $AnswerPath; tracePath = $TracePath
     responseErrors = @(); processError = $ProcessResult.Error
   }
-  foreach ($line in $ProcessResult.Stdout -split '\r?\n') {
-    try { $event = ConvertFrom-Json -InputObject $line -AsHashtable -NoEnumerate } catch { continue }
-    if ($event -is [System.Collections.IDictionary] -and $event['type'] -eq 'turn.completed' -and $event.Contains('usage')) {
-      $record.usage = $event.usage
+  $evidenceOptions = @{ Workspace = $Workspace }
+  if ($Mode -ne 'provided-content' -and $Run.Variant -ne 'none') { $evidenceOptions.SkillRoot = $CandidateRoot }
+  if ($TracePath -and (Test-Path -LiteralPath $TracePath -PathType Leaf)) { $evidenceOptions.TracePath = $TracePath }
+  else { $evidenceOptions.Trace = $ProcessResult.Stdout }
+  $evidence = Get-SkillReadEvidence @evidenceOptions
+  $record.usage = $evidence.usage
+  if ($evidenceOptions.ContainsKey('SkillRoot')) {
+    $record.skillRead = $evidence.skillRead
+    $record.referenceReads = $evidence.referenceReads
+    $record.unverifiedReads = $evidence.unverifiedReads
+    $record.rejectedReads = $evidence.rejectedReads
+    $record.unresolvedReads = $evidence.unresolvedReads
+    $record.candidateReadRejected = $evidence.rejectedReads.Count -gt 0
+    # Unattributed stderr is a diagnostic, not proof of which file was read.
+    $stderrReader = if ($StderrPath -and (Test-Path -LiteralPath $StderrPath -PathType Leaf)) {
+      [IO.File]::OpenText($StderrPath)
+    } else { [IO.StringReader]::new($ProcessResult.Stderr) }
+    $stderrRejection = $false
+    try {
+      while ($null -ne ($line = $stderrReader.ReadLine())) {
+        if ($line -match '(?i)SKILL\.md.*blocked by policy|blocked by policy.*SKILL\.md|references[/\\].*blocked by policy') {
+          $stderrRejection = $true; break
+        }
+      }
+    } finally { $stderrReader.Dispose() }
+    if ($stderrRejection) {
+      $record.unresolvedReads += 'Unattributed candidate read rejection on stderr; inspect stderr.txt.'
     }
   }
   if ($ProcessResult.ExitCode -ne 0 -or $ProcessResult.TimedOut -or $ProcessResult.Error) {
     return [pscustomobject]$record
   }
   $record.status = 'completed'
-  $record.candidateReadRejected = ($ProcessResult.Stdout -match '(?i)(?:Markdown|PowerShell|script|helper) (?:source )?read.{0,100}block|skill read.{0,100}policy.blocked|couldn.t inspect.{0,100}SKILL') -or
-    ($ProcessResult.Stderr -match '(?im)SKILL\.md.*blocked by policy|blocked by policy.*SKILL\.md|references[/\\].*blocked by policy')
-  if ($Mode -ne 'provided-content' -and $record.candidateReadRejected) { $record.status = 'candidate-read-rejected' }
-  if ($Mode -eq 'implicit' -and $Run.Variant -ne 'none') {
-    $evidence = Get-SkillReadEvidence -Trace $ProcessResult.Stdout -SkillRoot $CandidateRoot
-    $record.skillRead = $evidence.skillRead
-    $record.referenceReads = $evidence.referenceReads
-    $record.unverifiedReads = $evidence.unverifiedReads
-    if (-not $record.candidateReadRejected) { $record.triggerCorrect = $evidence.skillRead -eq $cases[0].shouldTrigger }
-    if ($evidence.unverifiedReads.Count -gt 0) { $record.status = 'read-evidence-unverified' }
-  }
+  if ($record.candidateReadRejected) { $record.status = 'candidate-read-rejected' }
+  elseif ($record.unverifiedReads.Count -or $record.unresolvedReads.Count) { $record.status = 'read-evidence-unverified' }
+  elseif ($Mode -eq 'implicit' -and $Run.Variant -ne 'none') { $record.triggerCorrect = $evidence.skillRead -eq $cases[0].shouldTrigger }
   try {
     if (-not $AnswerExists) { throw 'Answer file is missing.' }
     $response = ConvertFrom-Json -InputObject $AnswerText -AsHashtable -NoEnumerate -ErrorAction Stop

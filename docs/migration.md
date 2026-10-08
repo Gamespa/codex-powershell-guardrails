@@ -8,11 +8,20 @@ installed copies and user configuration are not updated by this refactor.
 
 `results.json` is always a JSON array, including a single run. Consumers that
 previously treated one run as an object must select its array element instead.
-Existing fields and statuses remain. Two diagnostic fields are added:
+Existing fields and statuses remain. Diagnostic fields include:
 
 - `responseErrors`: validation messages for malformed JSON, missing answers,
   or invalid answer fields.
 - `processError`: process startup or stdin transport error, otherwise null.
+- `rejectedReads`: candidate paths whose completed command events report a policy rejection.
+- `unresolvedReads`: read commands whose paths or attribution cannot be verified.
+
+Discovery now applies the same structured read-evidence checks as implicit mode.
+Relative paths must resolve from the supplied workspace or event `cwd`; matching
+a filename or prose mention is insufficient. Failed reads remain recorded even if
+a later attempt succeeds. Invalid evidence leaves `triggerCorrect` null. Callers
+of `Get-SkillReadEvidence` should supply `-Workspace` for relative paths, or use
+fully qualified paths. `-TracePath` supports reading complete JSONL logs from disk.
 
 Malformed or missing answers now produce `response-check-failed` records. The
 runner preserves raw answers, stdout JSONL, and stderr, saves each result, and
@@ -32,7 +41,17 @@ Existing command entrypoints and parameters under `scripts/` remain available.
 Evaluation internals now live in `scripts/lib/`: cases, candidate bundles,
 prompts, process lifecycle, trace evidence, result analysis, and orchestration.
 Modules export functions and perform no evaluation or filesystem writes on import.
-The orchestration module owns artifact writes; other modules return data.
+The orchestration module chooses artifact paths. The process module streams logs
+to those paths; the artifact module owns output locks and atomic result replacement.
+The internal process helper returns 64 KiB diagnostic previews and truncation flags;
+consumers needing full output must use its `StdoutPath` and `StderrPath` files.
+Injected test runners can accept these two extra positional arguments after timeout.
+The public evaluation CLI parameters are unchanged.
+
+Output directories now contain a persistent `.evaluation.lock` file whose OS
+handle, rather than its existence, indicates ownership. A crash releases the lock.
+Result snapshots are replaced atomically, preserving the previous file when a
+replacement fails. See [artifact lifecycle](evaluation.md#process-and-artifact-lifecycle).
 
 `scripts/read-skill-trace.ps1` remains a compatibility import shim. New code should
 import `scripts/lib/trace.psm1`. Behavior suites moved to `tests/behavior/`, with
