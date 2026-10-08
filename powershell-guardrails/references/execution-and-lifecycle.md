@@ -148,6 +148,29 @@ prove ownership. Use a lock or scheduler when concurrent launch is possible.
 - **Execution policy:** A local `PSSecurityException` differs from host denial.
   Process-scoped `-ExecutionPolicy Bypass` can address local policy for a trusted,
   authorized script; it cannot override Group Policy or host restrictions.
+- **Codex force-delete rejection:** A Windows command containing `Remove-Item`
+  and `-Force` can be classified as dangerous before PowerShell starts. With
+  `approval_policy=never`, an unmatched dangerous command can be forbidden even
+  under Full Access. An empty `matchedRules` result from a local `execpolicy check`
+  does not exclude built-in heuristics. Do not diagnose this as a PowerShell syntax,
+  execution-policy, or filesystem-permission error without supporting evidence.
+  Record the failed command, effective approval policy, and backend version;
+  a generic `blocked by policy` message alone does not identify the exact check.
+
+  Before the first cleanup attempt, inspect exact targets and use `-Force` only
+  when the task requires its semantics. Keep optional stale-file cleanup separate
+  from installation/copying, and omit deletion when no obsolete files exist.
+  After a host rejection, preserve the target and report the remaining cleanup;
+  do not remove flags, change shells/APIs, or weaken policy to retry that deletion.
+  Continue independent authorized work only within the allowed scope.
+
+  A local controlled probe on 2026-10-08 with Codex CLI 0.159.0 found that deletion
+  of an ordinary disposable file without `-Force` succeeded, while the equivalent
+  operation on a separate matching file with `-Force` was rejected before startup.
+  This is a host/version observation, not a universal PowerShell restriction or
+  proof that every policy rejection has this cause. See the upstream
+  [force-delete heuristic](https://github.com/openai/codex/blob/6ea62c4396a1c0942a3ea271e062bdd9e0d2737f/codex-rs/shell-command/src/command_safety/windows_dangerous_commands.rs#L207)
+  and [approval fallback](https://github.com/openai/codex/blob/6ea62c4396a1c0942a3ea271e062bdd9e0d2737f/codex-rs/core/src/exec_policy.rs#L793).
 - **curl / Schannel:** Use `curl.exe` when command resolution is ambiguous.
   Cross-check a Schannel failure with another client or
   logs before declaring an outage; retain native and HTTP status separately.
