@@ -1,5 +1,12 @@
 [
   {
+    "id": "analysis_without_runtime",
+    "shouldTrigger": true,
+    "language": "powershell",
+    "prompt": "Review this fragile Windows command and propose a repair only: pwsh -Command \"Get-ChildItem | ForEach-Object { $_.FullName }\". Only Windows PowerShell 5.1 is installed here. Do not execute the repair or install software.",
+    "expectedOutcome": "Propose direct current-shell execution or a literal child payload without requiring a local runtime probe or installation. If discussing later execution, retain the candidate's supported runtime requirement."
+  },
+  {
     "id": "nested_variables",
     "shouldTrigger": true,
     "language": "powershell",

@@ -5,7 +5,7 @@ function Assert-GuardrailsRuntime {
   }
   if ($Edition -ne 'Core' -or
       $Version.Major -lt 7 -or ($Version.Major -eq 7 -and $Version.Minor -lt 6)) {
-    throw "PowerShell Guardrails requires Windows and pwsh 7.6 or later; detected $Edition $Version on $Platform. Stop repaired task execution in this session. Use an already installed supported pwsh; if none is available on Windows, automatically install PowerShell 7.6 or later when user authorization exists, otherwise request authorization first. Installation guide: https://learn.microsoft.com/en-us/powershell/scripting/install/install-powershell-on-windows (with WinGet: winget install --id Microsoft.PowerShell --source winget; use winget upgrade for an older managed installation). Check installation success, resolve the installed pwsh path, and rerun this check in that runtime before resuming."
+    throw "PowerShell Guardrails requires Windows and pwsh 7.6 or later; detected $Edition $Version on $Platform. Stop repaired task execution in this session. Use an installed supported pwsh or follow references/runtime.md for authorized preparation, then recheck in that runtime. Analysis and proposed repairs can continue without installation."
   }
 }
 

@@ -2,6 +2,7 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
 $repositoryRoot = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..')).Path
+. (Join-Path $PSScriptRoot 'read-skill-trace.ps1')
 . (Join-Path $repositoryRoot 'powershell-guardrails/scripts/check-runtime.ps1')
 $childShell = Join-Path $PSHOME 'pwsh.exe'
 $searchTool = (Get-Command rg -CommandType Application -ErrorAction Stop | Select-Object -First 1).Source
@@ -26,6 +27,23 @@ function Write-Fixture {
 $previousNativeErrors = $PSNativeCommandUseErrorActionPreference
 $PSNativeCommandUseErrorActionPreference = $false
 try {
+  $traceRoot = Join-Path $repositoryRoot 'powershell-guardrails'
+  $goodEvent = @{ type = 'item.completed'; item = @{ type = 'command_execution';
+    command = 'Get-Content .agents/skills/powershell-guardrails/SKILL.md'; status = 'completed';
+    exit_code = 0; aggregated_output = 'name: powershell-guardrails' } }
+  $evidence = Get-SkillReadEvidence -Trace (( $goodEvent | ConvertTo-Json -Depth 6 -Compress) + "`n`n{}") -SkillRoot $traceRoot
+  Assert-Behavior $evidence.skillRead 'Successful skill read was not detected.'
+  $goodEvent.item.exit_code = 1
+  $evidence = Get-SkillReadEvidence -Trace ($goodEvent | ConvertTo-Json -Depth 6 -Compress) -SkillRoot $traceRoot
+  Assert-Behavior (-not $evidence.skillRead -and $evidence.unverifiedReads.Count -eq 1) 'Failed read counted as skill loading.'
+  $mention = @{ type = 'item.completed'; item = @{ type = 'agent_message'; text = 'I read SKILL.md' } }
+  $evidence = Get-SkillReadEvidence -Trace ($mention | ConvertTo-Json -Depth 6 -Compress) -SkillRoot $traceRoot
+  Assert-Behavior (-not $evidence.skillRead) 'Self-report counted as skill loading.'
+  $referenceEvent = @{ type = 'item.completed'; item = @{ type = 'command_execution';
+    command = 'Get-Content .agents/skills/powershell-guardrails/references/runtime.md'; status = 'completed';
+    exit_code = 0; aggregated_output = '# Runtime Preparation' } }
+  $evidence = Get-SkillReadEvidence -Trace ($referenceEvent | ConvertTo-Json -Depth 6 -Compress) -SkillRoot $traceRoot
+  Assert-Behavior ($evidence.referenceReads.Count -eq 1 -and $evidence.referenceReads[0] -eq 'references/runtime.md') 'Reference read was not detected.'
   foreach ($runtimeCase in @(
     @{ Version = '7.6.0'; Edition = 'Core'; Platform = 'Win32NT'; Accepted = $true },
     @{ Version = '7.6.1'; Edition = 'Core'; Platform = 'Win32NT'; Accepted = $true },
@@ -236,11 +254,12 @@ $stdout.Write($bytes, 0, $bytes.Length)
   $entrypointProbe = Write-Fixture 'entrypoint-probe.ps1' @'
 param([string]$Verifier)
 function git { $global:LASTEXITCODE = 42 }
+function python { $global:LASTEXITCODE = 0 }
 & $Verifier
 '@
   $entrypointOutput = & $childShell -NoLogo -NoProfile -NonInteractive -File $entrypointProbe (Join-Path $stubScripts 'verify.ps1') 2>&1
   $entrypointExit = $LASTEXITCODE
-  Assert-Behavior ($entrypointExit -ne 0 -and ($entrypointOutput -join "`n") -notmatch 'validation chain passed') 'Verifier falsely reported Git failure as success.'
+  Assert-Behavior ($entrypointExit -ne 0 -and ($entrypointOutput -join "`n") -match 'git diff --check failed' -and ($entrypointOutput -join "`n") -notmatch 'validation chain passed') 'Verifier falsely reported Git failure as success.'
 
   # Validate that metadata flexibility and broken-reference detection are real.
   $metadataRoot = Join-Path $fixtureRoot 'metadata'
@@ -278,7 +297,7 @@ name: 'powershell-guardrails'
     $runtimeExit = $LASTEXITCODE
     $runtimeText = ($runtimeOutput -join "`n") -replace '\s+', ' '
     Assert-Behavior ($runtimeExit -ne 0 -and $runtimeText -match 'requires Windows and pwsh 7\.6 or later') 'Windows PowerShell did not produce the expected runtime rejection.'
-    Assert-Behavior ($runtimeText -match 'automatically install PowerShell 7\.6 or later when user authorization exists' -and $runtimeText -match 'https://learn\.microsoft\.com/') 'Unsupported runtime diagnostic omitted authorized installation guidance.'
+    Assert-Behavior ($runtimeText -match 'references/runtime.md' -and $runtimeText -match 'Analysis and proposed repairs can continue') 'Unsupported runtime diagnostic omitted preparation routing or analysis allowance.'
   }
 } finally {
   $PSNativeCommandUseErrorActionPreference = $previousNativeErrors

@@ -10,6 +10,7 @@ $requiredFiles = @('README.md', 'LICENSE', '.gitattributes', 'powershell-guardra
   'powershell-guardrails/references/arguments-and-expansion.md',
   'powershell-guardrails/references/ssh-and-encoding.md',
   'powershell-guardrails/references/execution-and-lifecycle.md',
+  'powershell-guardrails/references/runtime.md', 'scripts/validate-skill-yaml.py',
   'tests/pressure-scenarios.md', 'scripts/verify.ps1',
   'scripts/verify-skill.ps1', 'scripts/verify-pressure-scenarios.ps1',
   'scripts/verify-behavior.ps1', 'scripts/evaluate-model.ps1', 'tests/model-cases.json')
@@ -23,32 +24,10 @@ $text = Get-Content -LiteralPath $skillPath -Raw -Encoding UTF8
 $frontmatter = [regex]::Match($text, '\A---\r?\n(?<Body>[\s\S]*?)\r?\n---(?:\r?\n|\z)')
 if (-not $frontmatter.Success) { throw 'SKILL.md needs delimited YAML frontmatter.' }
 
-# Validate required literal scalar fields without fixing their order or delimiter line.
-# Optional YAML metadata is left to a full YAML validator such as skill-creator's
-# quick_validate.py; this portable PowerShell check is not a general YAML parser.
-function Get-RequiredScalar {
-  param([string]$Key)
-  $matchesForKey = [regex]::Matches($frontmatter.Groups['Body'].Value, "(?m)^${Key}:\s*(?<Value>[^\r\n]*)$")
-  if ($matchesForKey.Count -ne 1) { throw "Expected one $Key field." }
-  $rawValue = $matchesForKey[0].Groups['Value'].Value.Trim()
-  if ($rawValue -match '^[>|][-+]?$') {
-    $block = [regex]::Match($frontmatter.Groups['Body'].Value, "(?m)^${Key}:\s*[>|][-+]?\s*\r?\n(?<Lines>(?:[ \t]+[^\r\n]*(?:\r?\n|\z))+)")
-    $rawValue = ($block.Groups['Lines'].Value.Trim() -split '\r?\n' | ForEach-Object { $_.Trim() }) -join ' '
-  } elseif ($rawValue.StartsWith('"') -and $rawValue.EndsWith('"')) {
-    $rawValue = $rawValue | ConvertFrom-Json
-  } elseif ($rawValue.StartsWith("'") -and $rawValue.EndsWith("'")) {
-    $rawValue = $rawValue.Substring(1, $rawValue.Length - 2).Replace("''", "'")
-  } elseif ($rawValue -match '^\d+$|^(true|false|null|~)$|^[\[\{&*!]') {
-    throw "$Key must be a literal string scalar."
-  }
-  if ([string]::IsNullOrWhiteSpace($rawValue)) { throw "$Key cannot be empty." }
-  return $rawValue
-}
-$name = Get-RequiredScalar 'name'
-if ($name -ne (Split-Path -Leaf $skillRoot)) { throw 'Skill name must match its directory.' }
-if ($name.Length -gt 64 -or $name -notmatch '^[a-z0-9]+(?:-[a-z0-9]+)*$') { throw 'Invalid skill name.' }
-$description = Get-RequiredScalar 'description'
-if ($description.Length -gt 1024) { throw 'Description exceeds the skill format limit.' }
+$python = (Get-Command python -CommandType Application -ErrorAction Stop | Select-Object -First 1).Source
+& $python (Join-Path $repoRoot 'scripts/validate-skill-yaml.py') $skillRoot
+$yamlExit = $LASTEXITCODE
+if ($yamlExit -ne 0) { throw 'Full YAML validation failed; Python and PyYAML are required.' }
 
 $documents = @(Get-ChildItem -LiteralPath $skillRoot -Recurse -File -Filter '*.md') +
   @(Get-Item -LiteralPath (Join-Path $repoRoot 'README.md'), (Join-Path $repoRoot 'tests/pressure-scenarios.md'))

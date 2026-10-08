@@ -7,6 +7,9 @@ $repoRoot = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..')).Path
 foreach ($verifier in @('verify-skill.ps1', 'verify-pressure-scenarios.ps1', 'verify-behavior.ps1')) {
   & (Join-Path $PSScriptRoot $verifier)
 }
+python -m unittest discover -s (Join-Path $repoRoot 'tests') -p 'test_*.py'
+$testExit = $LASTEXITCODE
+if ($testExit -ne 0) { throw 'Python validator regression tests failed.' }
 git -C $repoRoot diff --check
 $diffExit = $LASTEXITCODE
 if ($diffExit -ne 0) {

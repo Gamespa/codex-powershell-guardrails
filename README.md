@@ -12,19 +12,13 @@ the installed skill. The guidance is model-independent: a newer
 model does not change PowerShell syntax or process identity requirements.
 
 Prefer an already installed `pwsh` 7.6 or later over Windows PowerShell 5.1.
-Before applying the skill, run its `scripts/check-runtime.ps1` in the actual
-execution session. Unsupported versions, including Windows PowerShell 5.1 and
-PowerShell below 7.6, stop with a diagnostic. If no supported runtime is
-available, stop repaired task execution and automatically install or upgrade to
-PowerShell 7.6 or later when the user has authorized it. Reuse existing session
-authorization; otherwise request authorization for the proposed method first.
-Follow the [official Windows installation guide](https://learn.microsoft.com/en-us/powershell/scripting/install/install-powershell-on-windows).
-With WinGet, use `winget install --id Microsoft.PowerShell --source winget`, or
-`winget upgrade --id Microsoft.PowerShell --source winget` for an older managed
-installation; otherwise use a suitable official installer. Discovery and authorized
-installation may run under 5.1, but repaired task commands may not. Check installer
-success, resolve the installed `pwsh` path again, and recheck in that runtime before
-resuming. The runtime check itself only validates and never installs software.
+Reviewing commands and proposing repairs do not require local runtime preparation.
+Before executing repaired task commands, run `scripts/check-runtime.ps1` in the
+actual execution session. Unsupported versions stop task execution with a diagnostic.
+If no supported runtime exists, follow
+[runtime preparation](powershell-guardrails/references/runtime.md), which centralizes
+discovery, authorized installation, and rechecking. The runtime check only validates
+and never installs software.
 Child PowerShell commands use the checked installation's
 `Join-Path $PSHOME 'pwsh.exe'`, rather than resolving a potentially different
 installation through PATH. Recheck when changing execution environments.
@@ -74,20 +68,24 @@ powershell-guardrails/
   references/arguments-and-expansion.md  Native arguments, batch setup, expansion
   references/ssh-and-encoding.md         Remote payloads and Unicode transport
   references/execution-and-lifecycle.md  Status, secrets, jobs, Windows diagnostics
+  references/runtime.md         Conditional runtime discovery and installation
 scripts/
   verify.ps1                    Complete local validation entrypoint
   verify-skill.ps1               Required metadata, references, example/script syntax
   verify-pressure-scenarios.ps1  Model-case schema and negative-control checks
   verify-behavior.ps1            Executable local regressions
   evaluate-model.ps1             Optional no-skill/original/updated comparison
+  read-skill-trace.ps1           Completed shell read evidence extraction
+  validate-skill-yaml.py          Full YAML parsing and metadata validation
 tests/model-cases.json          Model prompts and observable expected outcomes
+tests/test_skill_yaml.py        Disposable YAML validation regressions
 tests/pressure-scenarios.md     Outcome-based maintenance scenarios
 artifacts/                       Ignored model-evaluation results and JSONL traces
 ```
 
 ## Local Verification
 
-Requirements: Windows, `pwsh` 7.6 or later, Git, and ripgrep on PATH. The local suite
+Requirements: Windows, `pwsh` 7.6 or later, Git, ripgrep, and Python with PyYAML on PATH. The local suite
 uses the same runtime gate as the installed skill. When Windows PowerShell 5.1
 is present, it is invoked only to verify that the gate rejects it.
 The runtime's production matching function is also exercised with version,
@@ -105,10 +103,12 @@ behavior checks, and checks `git diff --check`. Native Git failures explicitly
 fail the chain. No model calls, remote hosts, real tokens, or unrelated process
 cleanup are involved.
 
-The portable metadata check accepts required string fields in any order,
-optional metadata, and multiline descriptions. It is not a full YAML parser.
-For full YAML/skill-format validation, also use the installed skill-creator's
-`quick_validate.py` with Python and PyYAML when available.
+The metadata check uses PyYAML to parse frontmatter and `agents/openai.yaml`,
+accepting reordered fields and multiline descriptions. It rejects malformed YAML,
+duplicate keys, empty instructions, and invalid UI, policy, and dependency types.
+It also validates referenced icons. If PyYAML is absent, verification fails with a
+dependency diagnostic; it does not silently fall back to regex parsing or install
+dependencies. The installed skill-creator's `quick_validate.py` is an additional check.
 
 Use process-scoped `-ExecutionPolicy Bypass` only if a trusted, authorized script
 is blocked by local PowerShell execution policy. It is not part of the default
@@ -159,6 +159,25 @@ cases share context. Syntax checks do not establish semantic correctness.
 Review commands against `expectedOutcome` and test per-case discovery separately
 before claiming trigger accuracy. One sample is diagnostic, not evidence of
 consistent quality or speed improvements.
+
+For independent activation checks, use `-Mode implicit`. Each case gets a fresh
+process and workspace; the runner adds no candidate name, path, or instruction to
+load it. Cases that mention the skill themselves are labeled `explicit` and must
+be excluded from implicit-trigger accuracy. Candidate bundles include agent metadata.
+
+```powershell
+pwsh -NoLogo -NoProfile -NonInteractive -File .\scripts\evaluate-model.ps1 -Mode implicit -Variants updated -CaseIds nested_variables,ordinary_git
+```
+
+Use `-CaseIds` to select cases and `-Repeats` to repeat samples. `results.json`
+records `skillRead`, `triggerCorrect`, `referenceReads`, and `unverifiedReads`.
+Evidence requires a completed shell read with zero exit status and manifest or
+reference content in its output. Failed or unverified attempted reads invalidate
+the run. This extractor covers common shell reads, not all possible tool protocols;
+inspect raw traces before interpreting a missing read as a missed trigger. Trigger
+mismatches are recorded as false, rather than being hidden by run completion.
+Command semantics still require review against `expectedOutcome`. Model evaluations
+consume account quota and are separate from the local verification chain.
 
 See [official skill evaluation guidance](https://developers.openai.com/blog/eval-skills).
 

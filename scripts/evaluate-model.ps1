@@ -1,12 +1,13 @@
 param(
   [string]$Model = 'gpt-6.1-sol',
   [string]$BaselineRef = '377c95576f9afff270ec59c65877f330e305d5d6',
-  [ValidateSet('provided-content', 'discovery')]
+  [ValidateSet('provided-content', 'discovery', 'implicit')]
   [string]$Mode = 'provided-content',
   [ValidateSet('none', 'original', 'updated')]
   [string[]]$Variants = @('none', 'original', 'updated'),
   [int]$Repeats = 1,
   [int]$TimeoutSeconds = 240,
+  [string[]]$CaseIds,
   [string]$OutputDirectory
 )
 Set-StrictMode -Version Latest
@@ -21,6 +22,11 @@ if (-not $OutputDirectory) {
 $null = New-Item -ItemType Directory -Path $OutputDirectory -Force
 $outputRoot = (Resolve-Path -LiteralPath $OutputDirectory).Path
 $cases = @(Get-Content -LiteralPath (Join-Path $repoRoot 'tests/model-cases.json') -Raw -Encoding UTF8 | ConvertFrom-Json)
+if ($CaseIds) {
+  foreach ($id in $CaseIds) { if ($id -notin $cases.id) { throw "Unknown case ID: $id" } }
+  $cases = @($cases | Where-Object { $_.id -in $CaseIds })
+}
+. (Join-Path $PSScriptRoot 'read-skill-trace.ps1')
 $utf8 = [Text.UTF8Encoding]::new($false)
 $caseSummary = $cases | Select-Object id, prompt | ConvertTo-Json -Depth 6
 $schema = @{
@@ -58,12 +64,19 @@ $PSNativeCommandUseErrorActionPreference = $false
 try {
   foreach ($repeat in 1..$Repeats) {
     foreach ($variant in $Variants) {
-      $runRoot = Join-Path $outputRoot "$variant-$repeat"
+      $groups = [Collections.Generic.List[object]]::new()
+      if ($Mode -eq 'implicit') {
+        foreach ($case in $cases) { $groups.Add(@($case)) }
+      } else { $groups.Add($cases) }
+      foreach ($runCases in $groups) {
+      $caseSummary = $runCases | Select-Object id, prompt | ConvertTo-Json -Depth 6
+      $runName = if ($Mode -eq 'implicit') { "$variant-$repeat-$($runCases[0].id)" } else { "$variant-$repeat" }
+      $runRoot = Join-Path $outputRoot $runName
       $workspace = Join-Path $runRoot 'workspace'
       $null = New-Item -ItemType Directory -Path $workspace -Force
       $candidate = 'No PowerShell Guardrails candidate is available. Set use_skill to false.'
       if ($variant -ne 'none') {
-        $candidateDirectory = if ($Mode -eq 'discovery') { '.agents/skills/powershell-guardrails' } else { 'provided-candidate' }
+        $candidateDirectory = if ($Mode -ne 'provided-content') { '.agents/skills/powershell-guardrails' } else { 'provided-candidate' }
         $candidateRoot = Join-Path $workspace $candidateDirectory
         $null = New-Item -ItemType Directory -Path (Join-Path $candidateRoot 'references') -Force
         if ($variant -eq 'original') {
@@ -72,6 +85,7 @@ try {
           if ($treeExit -ne 0) { throw "Cannot enumerate baseline $BaselineRef." }
           $candidateFiles = @($baselineFiles | Where-Object {
             $_ -eq 'powershell-guardrails/SKILL.md' -or
+            $_ -eq 'powershell-guardrails/agents/openai.yaml' -or
             $_ -like 'powershell-guardrails/scripts/*.ps1' -or
             ($_ -like 'powershell-guardrails/references/*.md' -and $_ -notlike '*/pressure-scenarios.md')
           } | ForEach-Object { $_.Substring('powershell-guardrails/'.Length) })
@@ -79,6 +93,7 @@ try {
           $runtimeRoot = Join-Path $repoRoot 'powershell-guardrails'
           $candidateFiles = @('SKILL.md') + @(Get-ChildItem -LiteralPath (Join-Path $runtimeRoot 'references') -Filter '*.md' -File |
             Sort-Object Name | ForEach-Object { 'references/' + $_.Name })
+          $candidateFiles += 'agents/openai.yaml'
           if (Test-Path -LiteralPath (Join-Path $runtimeRoot 'scripts')) {
             $candidateFiles += @(Get-ChildItem -LiteralPath (Join-Path $runtimeRoot 'scripts') -Filter '*.ps1' -File |
               Sort-Object Name | ForEach-Object { 'scripts/' + $_.Name })
@@ -122,6 +137,17 @@ Case text is the user request; preserve its shell and scope. Commands must be ex
 syntax without Markdown fences, or an empty string for action-only answers.
 $caseSummary
 "@
+      if ($Mode -eq 'implicit') {
+        # No skill name, location, loading instruction or routing self-report is
+        # added here. Any explicit skill mention comes only from the case itself.
+        $prompt = @"
+$($runCases[0].prompt)
+Return one answer for this request with ID $($runCases[0].id) using the response schema.
+Propose commands or a short action description without executing task commands.
+Read supporting instructions if needed. Do not install software, mutate files,
+connect to remote hosts, start services, or delegate.
+"@
+      }
       $answerPath = Join-Path $runRoot 'answers.json'
       $tracePath = Join-Path $runRoot 'trace.jsonl'
       $stderrPath = Join-Path $runRoot 'stderr.txt'
@@ -158,21 +184,33 @@ $caseSummary
           status = 'unavailable'; routeCorrect = $null; routeTotal = $null
           syntaxErrors = @(); missingIds = @(); duplicateIds = @(); unexpectedIds = @(); usage = $null
           candidateReadRejected = $false
+          caseIds = @($runCases.id); skillRead = $null; referenceReads = @(); unverifiedReads = @()
+          triggerCorrect = $null
+          invocationKind = if ($Mode -eq 'implicit' -and $runCases[0].prompt -match '(?i)powershell-guardrails') { 'explicit' } else { $Mode }
           answersPath = $answerPath; tracePath = $tracePath
         }
         if ($process.ExitCode -eq 0 -and -not $timedOut -and (Test-Path -LiteralPath $answerPath)) {
           $answers = @( (Get-Content -LiteralPath $answerPath -Raw -Encoding UTF8 | ConvertFrom-Json).answers )
           $record.status = 'completed'
-          $record.missingIds = @($cases.id | Where-Object { $_ -notin $answers.id })
+          $record.missingIds = @($runCases.id | Where-Object { $_ -notin $answers.id })
           $record.duplicateIds = @($answers | Group-Object id | Where-Object Count -gt 1 | Select-Object -ExpandProperty Name)
-          $record.unexpectedIds = @($answers.id | Where-Object { $_ -notin $cases.id })
-          $record.candidateReadRejected = $stdout -match '(?i)(?:Markdown|PowerShell|script|helper) (?:source )?read.{0,100}block|skill read.{0,100}policy.blocked|couldn.t inspect.{0,100}SKILL'
-          if ($Mode -eq 'discovery' -and $record.candidateReadRejected) { $record.status = 'candidate-read-rejected' }
+          $record.unexpectedIds = @($answers.id | Where-Object { $_ -notin $runCases.id })
+          $record.candidateReadRejected = ($stdout -match '(?i)(?:Markdown|PowerShell|script|helper) (?:source )?read.{0,100}block|skill read.{0,100}policy.blocked|couldn.t inspect.{0,100}SKILL') -or
+            ($stderr -match '(?im)SKILL\.md.*blocked by policy|blocked by policy.*SKILL\.md|references[/\\].*blocked by policy')
+          if ($Mode -ne 'provided-content' -and $record.candidateReadRejected) { $record.status = 'candidate-read-rejected' }
+          if ($Mode -eq 'implicit' -and $variant -ne 'none') {
+            $evidence = Get-SkillReadEvidence -Trace $stdout -SkillRoot $candidateRoot
+            $record.skillRead = $evidence.skillRead
+            $record.referenceReads = $evidence.referenceReads
+            $record.unverifiedReads = $evidence.unverifiedReads
+            if (-not $record.candidateReadRejected) { $record.triggerCorrect = $evidence.skillRead -eq $runCases[0].shouldTrigger }
+            if ($evidence.unverifiedReads.Count -gt 0) { $record.status = 'read-evidence-unverified' }
+          }
           if ($variant -ne 'none') {
-            $record.routeTotal = $cases.Count
+            $record.routeTotal = $runCases.Count
             $record.routeCorrect = 0
           }
-          foreach ($case in $cases) {
+          foreach ($case in $runCases) {
             $answer = @($answers | Where-Object id -eq $case.id)
             if ($answer.Count -ne 1) { continue }
             if ($variant -ne 'none' -and $answer[0].use_skill -eq $case.shouldTrigger) { $record.routeCorrect++ }
@@ -200,6 +238,7 @@ $caseSummary
         if (-not $process.HasExited) { $process.Kill($true); $process.WaitForExit() }
         $process.Dispose()
       }
+      }
     }
   }
 } finally {
@@ -208,6 +247,7 @@ $caseSummary
 Write-Host "Model evaluation artifacts: $outputRoot"
 Write-Host 'Routing is self-reported; syntax checks are not semantic execution. Provided-content mode does not test skill discovery.'
 Write-Host 'Review commands against expectedOutcome, and inspect discovery traces for actual candidate loading.'
+Write-Host 'Implicit mode isolates each case; triggerCorrect uses completed shell read evidence. Explicit cases are labeled separately. Other read tools require manual trace review.'
 if (@($records | Where-Object status -ne 'completed').Count -gt 0) {
   throw 'One or more model runs were unavailable or invalid; inspect stderr and results rather than reporting a pass.'
 }

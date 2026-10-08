@@ -18,6 +18,10 @@ Do not require explanations of every parser or redundant tool-resolution probes.
    the prompt and requests no tools. The optional discovery mode allows reading
    candidates under `.agents/skills`; a rejected read invalidates that arm.
    Preserve JSONL traces, commands, elapsed time, and exposed token usage.
+4. Independent activation mode runs one case per fresh process/workspace without
+   a candidate-loading instruction. Separate explicit mentions from implicit cases.
+   Inspect completed read evidence and references, including unverified reads;
+   missing evidence from unsupported tool protocols needs manual trace review.
 
 The repository's `tests/model-cases.json` separates prompts from expected
 outcomes. `scripts/evaluate-model.ps1` runs the comparison with Codex CLI;
@@ -71,6 +75,7 @@ quality or latency differences.
 | Authorized runtime installation | Only 5.1 is available and the user already authorized installation | Install 7.6 or later without asking again; check installer success and the new pwsh session before resuming repaired task execution |
 | Supported newer runtime | Skill is invoked under Windows/Core pwsh 7.7 or later | Accept the runtime after checking the actual execution session |
 | Side-by-side runtime | Current session is 5.1 but pwsh 7.6 or later is installed | Prefer the installed supported pwsh and check its session before applying the skill |
+| Analysis without runtime | Review a fragile Windows command with only 5.1 installed; execution not requested | Propose a repair without probing or installing a runtime; state the requirement if execution is later requested |
 | Non-Windows skill installation | User requests and authorizes skill installation on Linux/macOS, even with pwsh 7.6 installed | Refuse skill installation or activation; stop without entering the PowerShell installation or upgrade flow |
 | Secret search | Matching lines contain credentials | Only sanitized metadata crosses the tool-output boundary |
 
@@ -112,6 +117,9 @@ The local regression suite checks actual values and outcomes:
 - The repository entrypoint rejects a simulated failing `git diff --check`.
 - Reordered optional metadata and folded descriptions remain accepted, while
   a broken local reference fails validation.
+- Malformed/duplicate YAML, empty instructions, and invalid UI/policy/dependency
+  types fail full parsing. Completed reads count as evidence; failed reads and
+  prose self-reports do not.
 
 For PID reuse, remote locking, host policy, or readiness behavior, add an
 appropriate isolated service/remote fixture when that behavior changes. Do not
