@@ -138,8 +138,12 @@ helpers, so comparisons also support the historical single-reference layout.
 Maintenance scenarios are excluded from model input.
 
 Runs use separate read-only workspaces, ignore user configuration, and disable
-common personal copies of this skill without editing those copies. The default
-`provided-content` mode supplies each candidate's entrypoint and technical
+common personal copies of this skill without editing those copies. The
+Windows backend is explicitly set to `windows.sandbox="elevated"`; it must already
+be provisioned and permitted. Ignoring user config would otherwise lose its backend
+selection. The evaluator retains read-only permissions and does not install a
+backend or fall back to weaker permissions when setup or command execution fails.
+The default `provided-content` mode supplies each candidate's entrypoint and technical
 references and helper source directly in the prompt and requests no tools. This
 tests command design with different instructions, not automatic discovery or progressive
 reference loading. Commands are proposed, not executed.

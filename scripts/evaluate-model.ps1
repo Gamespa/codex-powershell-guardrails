@@ -157,8 +157,11 @@ connect to remote hosts, start services, or delegate.
       $startInfo.RedirectStandardInput = $true
       $startInfo.RedirectStandardOutput = $true
       $startInfo.RedirectStandardError = $true
+      # User config is excluded for isolation, so select the provisioned Windows
+      # backend explicitly; read-only permissions alone do not enable it.
       foreach ($argument in @('exec', '--ignore-user-config', '--ephemeral', '--skip-git-repo-check',
-          '--sandbox', 'read-only', '--json', '--model', $Model, '--cd', $workspace,
+          '--sandbox', 'read-only', '-c', 'windows.sandbox="elevated"',
+          '--json', '--model', $Model, '--cd', $workspace,
           '--output-schema', $schemaPath, '--output-last-message', $answerPath, '-c', $skillConfig, '-')) {
         $startInfo.ArgumentList.Add($argument)
       }
