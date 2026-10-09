@@ -25,11 +25,14 @@ function Read-ModelCases {
       $validator = $case.validator
       if ($null -eq $validator -or $validator -isnot [pscustomobject] -or
           -not $validator.PSObject.Properties['id'] -or -not $validator.PSObject.Properties['version'] -or
-          $validator.id -isnot [string] -or $validator.version -isnot [long] -or $validator.version -ne 1 -or
+          $validator.id -isnot [string] -or $validator.version -isnot [long] -or
           $case.language -ne 'powershell' -or @($validator.PSObject.Properties.Name | Where-Object { $_ -notin @('id', 'version') }).Count) {
         throw "Invalid semantic validator configuration for case $($case.id)."
       }
       $null = Get-SemanticContract $validator.id
+      if ($validator.version -ne (Get-SemanticValidatorVersion $validator.id)) {
+        throw "Unsupported semantic validator version for case $($case.id)."
+      }
     }
   }
   if (@($cases | Where-Object shouldTrigger).Count -eq 0 -or

@@ -138,11 +138,26 @@ function Test-SemanticObservation {
     }
     'json-search' {
       $lines = @($execution.Stdout -split '\r?\n' | Where-Object { $_.Length })
-      $checks.Add([pscustomobject]@{ name = 'recursive-json-only'; passed = $lines.Count -eq 2 -and
-        @($lines | Where-Object { $_.Contains($Scenario.expected.first) }).Count -eq 1 -and
-        @($lines | Where-Object { $_.Contains($Scenario.expected.second) }).Count -eq 1 -and
-        -not $execution.Stdout.Contains($Scenario.expected.excluded) -and
-        @($lines | Where-Object { $_ -match '\.json:' }).Count -eq 2 })
+      # Compare path/content pairs rather than requiring rg's colon separator.
+      # A drive-letter colon belongs to the path, not to the result delimiter.
+      $seen = [Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
+      $valid = $lines.Count -eq 2
+      foreach ($line in $lines) {
+        $match = [regex]::Match($line, '^(?<path>.+?\.json)(?::(?:(?<number>[0-9]+):)?|\t(?:(?<number>[0-9]+)\t)?)(?<text>.*)$', 'IgnoreCase')
+        if (-not $match.Success -or ($match.Groups['number'].Success -and $match.Groups['number'].Value -ne '1')) { $valid = $false; continue }
+        $path = $match.Groups['path'].Value.Replace('\', '/') -replace '^(?:\./)+', ''
+        $text = $match.Groups['text'].Value
+        $hits = @($Scenario.payload.files.Keys | Where-Object {
+          $expectedPath = $_.Replace('\', '/')
+          ($path -ieq $expectedPath -or
+            ($path -match '^(?:[a-zA-Z]:/|//)' -and $path -notmatch '/\.\.?/' -and
+             $path.EndsWith('/' + $expectedPath, [StringComparison]::OrdinalIgnoreCase))) -and
+          $Scenario.payload.files[$_] -ceq $text -and
+          $text -cin @($Scenario.expected.first, $Scenario.expected.second)
+        })
+        if ($hits.Count -ne 1 -or -not $seen.Add($hits[0])) { $valid = $false }
+      }
+      $checks.Add([pscustomobject]@{ name = 'recursive-json-only'; passed = $valid -and $seen.Count -eq 2 })
     }
   }
   $checks.ToArray()

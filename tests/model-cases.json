@@ -32,7 +32,7 @@
     "expectedOutcome": "Search the directory with rg -g '*.json' (or enumerate concrete files); do not pass the wildcard pathname literally to rg.",
     "validator": {
       "id": "json-search",
-      "version": 1
+      "version": 2
     }
   },
   {

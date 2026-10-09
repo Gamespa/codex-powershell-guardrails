@@ -18,7 +18,7 @@ function Invoke-SemanticEvaluation {
   }
   foreach ($case in $Cases) {
     $validator = if ($case.PSObject.Properties['validator']) { $case.validator.id } else { $null }
-    $record = [ordered]@{ id = $case.id; validator = $validator; validatorVersion = if ($validator) { 1 } else { $null }
+    $record = [ordered]@{ id = $case.id; validator = $validator; validatorVersion = if ($validator) { Get-SemanticValidatorVersion $validator } else { $null }
       semanticStatus = 'not-evaluated'; reason = $null; trials = @() }
     if (-not $validator) { $record.reason = 'no-validator' }
     elseif (-not $ResponseValid) { $record.reason = 'invalid-model-response' }

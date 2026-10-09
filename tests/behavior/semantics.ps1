@@ -25,7 +25,11 @@ if ($LASTEXITCODE -ne 0) { throw 'Exporter failed.' }
   }
 }
 '@
-  windows_rg_file_glob = "rg -n -g '*.json' -- marker ./data"
+  windows_rg_file_glob = @'
+Get-ChildItem ./data -Recurse -File -Filter '*.json' | ForEach-Object {
+  Select-String -LiteralPath $_.FullName -SimpleMatch marker
+} | ForEach-Object { "$($_.Path)`t$($_.Line)" }
+'@
   structured_output = 'ConvertTo-Json -InputObject @($reports) -Depth 12 -Compress'
 }
 $bad = @{
@@ -55,6 +59,7 @@ Assert-Behavior ($disabled.summary.configured -eq 5 -and $disabled.summary.evalu
 $verified = Invoke-SemanticEvaluation -Cases $selected -Answers $answers -Image offline -OutputDirectory (Join-Path $fixtureRoot 'good') -Backend $trustedBackend
 Assert-Behavior ($verified.summary.passed -eq 5 -and $verified.summary.failed -eq 0 -and $verified.summary.infrastructureErrors -eq 0) "Correct fixtures failed: $($verified | ConvertTo-Json -Depth 12 -Compress)"
 Assert-Behavior ($verified.summary.notEvaluated -eq 1 -and $verified.summary.evaluatedCoverage -eq (5 / 6) -and $verified.summary.passRate -eq 1) 'Coverage denominator or pass rate is incorrect.'
+Assert-Behavior (($verified.cases | Where-Object id -eq 'windows_rg_file_glob').validatorVersion -eq 2) 'JSON search results reported an outdated validator version.'
 Assert-Behavior (@($verified.cases | Where-Object validator | ForEach-Object trials).Count -eq 22) 'Scenario/seed coverage changed unexpectedly.'
 $answers = @($bad.Keys | ForEach-Object { [pscustomobject]@{ id = $_; command = $bad[$_] } })
 $failed = Invoke-SemanticEvaluation -Cases $selected -Answers $answers -Image offline -OutputDirectory (Join-Path $fixtureRoot 'bad') -Backend $trustedBackend

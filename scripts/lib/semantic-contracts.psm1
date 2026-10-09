@@ -19,4 +19,10 @@ function Get-CaseSemanticContract {
   }
 }
 
-Export-ModuleMember -Function Get-SemanticContract, Get-CaseSemanticContract
+function Get-SemanticValidatorVersion {
+  param([string]$Validator)
+  $null = Get-SemanticContract $Validator
+  if ($Validator -eq 'json-search') { 2 } else { 1 }
+}
+
+Export-ModuleMember -Function Get-SemanticContract, Get-CaseSemanticContract, Get-SemanticValidatorVersion
