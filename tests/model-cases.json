@@ -36,6 +36,27 @@
     }
   },
   {
+    "id": "bash_brace_paths_recent",
+    "shouldTrigger": true,
+    "language": "powershell",
+    "prompt": "In Windows pwsh 7.6, rg -n 'marker' src/{alpha,beta}.ts fails before rg starts. Search exactly src/alpha.ts and src/beta.ts without searching other files.",
+    "expectedOutcome": "Pass the two concrete paths as separate native arguments or otherwise select exactly those files; do not rely on PowerShell to expand Bash braces."
+  },
+  {
+    "id": "foreach_json_recent",
+    "shouldTrigger": true,
+    "language": "powershell",
+    "prompt": "In pwsh 7.6, foreach ($item in $items) { [pscustomobject]@{ Name = $item.Name } } | ConvertTo-Json reports an empty pipe element. Serialize the resulting objects, preserving their names.",
+    "expectedOutcome": "Wrap or collect the foreach statement results before piping to ConvertTo-Json, or use an equivalent pipeline; preserve the objects."
+  },
+  {
+    "id": "wsl_bash_search_recent",
+    "shouldTrigger": true,
+    "language": "powershell",
+    "prompt": "From Windows pwsh 7.6, run a WSL Bash search for regex alpha|beta in /srv/project/src/{first,second}.ts. Nested quoting failed before WSL started. Preserve the Bash brace expansion and check the search status.",
+    "expectedOutcome": "Use a literal Bash payload or another correctly separated parser boundary so Bash receives the regex and brace expression; check WSL exit status and distinguish an expected no-match when appropriate."
+  },
+  {
     "id": "colon_interpolation_recent",
     "shouldTrigger": true,
     "language": "powershell",

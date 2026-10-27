@@ -62,3 +62,18 @@ $value = 'ok'
 Assert-Behavior ("${name}: $value" -ceq 'request: ok') 'Variable boundary formatting failed.'
 $sorted = & { foreach ($number in @(3, 1, 2)) { [pscustomobject]@{ Number = $number } } } | Sort-Object Number
 Assert-Behavior (($sorted.Number -join ',') -eq '1,2,3') 'Statement output pipeline failed.'
+
+$braceFirst = Write-Fixture 'brace-first.ts' 'marker first'
+$braceSecond = Write-Fixture 'brace-second.ts' 'marker second'
+$null = Write-Fixture 'brace-other.ts' 'marker other'
+$selectedPaths = @($braceFirst, $braceSecond)
+$selectedOutput = & $searchTool -l -- 'marker' @selectedPaths
+$selectedExit = $LASTEXITCODE
+$actualSelected = @($selectedOutput | Sort-Object)
+$expectedSelected = @($selectedPaths | Sort-Object)
+Assert-Behavior ($selectedExit -eq 0 -and $actualSelected.Count -eq 2 -and
+  $actualSelected[0] -ceq $expectedSelected[0] -and $actualSelected[1] -ceq $expectedSelected[1]) 'Explicit native paths selected the wrong files.'
+
+$reportJson = & { foreach ($number in @(3, 1, 2)) { [pscustomobject]@{ Number = $number; Label = "item-$number" } } } | ConvertTo-Json -Compress
+$report = @($reportJson | ConvertFrom-Json)
+Assert-Behavior ($report.Count -eq 3 -and $report[0].Number -eq 3 -and $report[1].Label -ceq 'item-1' -and $report[2].Number -eq 2) 'Statement output JSON lost object values.'

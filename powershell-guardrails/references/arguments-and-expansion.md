@@ -33,6 +33,12 @@ Use `rg --files -g '*.json' .\data` for a file inventory. If another native
 tool has no glob option, enumerate concrete paths before invoking it; account
 for an empty result instead of passing an unmatched wildcard.
 
+PowerShell also does not perform Bash brace expansion: an unquoted path such
+as `src/{alpha,beta}.ts` can fail at the PowerShell parser before `rg` starts;
+quoting it does not expand it either. Pass explicit paths as an array, or use
+the native tool's filename filters. If expansion is intentional, make sure the
+expression reaches Bash as part of a literal Bash script.
+
 Reserve `--%` for a fixed native command that requires it. It stops parsing
 through a newline or pipe, still expands `%ENV%`, and prevents `$variable`
 expansion; prefer direct arguments for modern executables.
@@ -78,6 +84,22 @@ print("ready")
 '@
 $code | python -
 if ($LASTEXITCODE -ne 0) { throw 'Python failed' }
+```
+
+The same boundary applies to WSL: PowerShell parses the outer command before
+`wsl.exe` starts. For a quote-sensitive Bash search, send a literal Bash
+script as UTF-8 bytes to `bash -s`, instead of embedding Bash quotes in an
+expandable PowerShell command. Use a known WSL distribution and Linux paths;
+the script's stdin is then occupied by the script itself.
+
+```powershell
+$wslScript = @'
+cd /srv/project
+rg -n -- 'alpha|beta' src/{first,second}.ts
+'@
+$wslBytes = [Text.Encoding]::UTF8.GetBytes(($wslScript -replace "`r`n", "`n"))
+,$wslBytes | wsl.exe -d Ubuntu -e bash -s
+if ($LASTEXITCODE -ne 0) { throw 'WSL search failed or found no matches' }
 ```
 
 ### Interpolation and statements

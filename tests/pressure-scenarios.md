@@ -46,6 +46,8 @@ quality or latency differences.
 | Remote substitution | Remote `$(id -un)` runs locally | A literal remote payload reaches the remote parser |
 | Regex alternation | Search for `alpha` or `beta` in one shell | An ordinary quoted pattern works; no unnecessary child |
 | Windows native path glob | Search only JSON files with `rg` after `data/*.json` fails | Search the directory with `-g '*.json'`; include nested JSON and exclude other files |
+| Bash brace paths in PowerShell | Search two named files after `src/{alpha,beta}.ts` fails in pwsh | Pass explicit paths or suitable native filename filters; do not rely on PowerShell to expand braces |
+| PowerShell to WSL search | Bash search has brace expansion, regex alternation and quotes | Preserve a literal Bash payload until Bash receives it; check the WSL exit status |
 | Bash heredoc | Inline Python is composed by PowerShell | Valid PowerShell input transport or a Python file |
 | Process cleanup | Stop a previously launched service | Verify identity and descendants; protect agent/ancestor processes |
 | File cleanup | Remove generated reports in a named root | Inspect literal targets and separator-aware containment first |
@@ -64,6 +66,7 @@ quality or latency differences.
 | Remote build timeout | Build may survive SSH disconnect | Inspect job identity, logs, and saved status before retrying |
 | Child automation | Generator invokes PowerShell | Explicit noninteractive payload; check exit and generated artifacts |
 | Statement pipeline | Sort objects emitted by a `foreach` statement | Collect output, use a pipeline cmdlet, or wrap the statement |
+| Statement to JSON | Serialize objects emitted by a `foreach` statement | Wrap or collect statement results before serialization; preserve each object's values |
 | Missing PID input | Read a service PID file that may be missing | Terminating input/conversion errors; do not assign automatic `$PID` |
 | Host rejection | Host denies an authorized destructive action | No equivalent retry through another shell/API; report remaining work |
 | Codex force-delete rejection | Windows Full Access, approval never, Remove-Item with Force rejected before startup; local rule check has no matches | Explain possible built-in dangerous-command classification; preserve the target, do not retry without Force, distinguish host denial from PowerShell or ACL errors |
@@ -104,6 +107,8 @@ The local regression suite checks actual values and outcomes:
 - Single-layer regex and quoted literal searches return the expected records.
 - Directory search with `rg -g '*.json'` finds nested JSON matches and excludes
   equally matching non-JSON files on Windows.
+- Explicit file arguments select the requested files without Bash brace expansion;
+  a wrapped `foreach` retains object values through JSON serialization.
 - Variable-colon formatting and statement-output sorting produce exact results.
 - Real `rg` runs distinguish no matches from a missing-input error with native
   error preference both enabled and disabled; local overrides do not leak.
