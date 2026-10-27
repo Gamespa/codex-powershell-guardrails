@@ -67,6 +67,8 @@ quality or latency differences.
 | Child automation | Generator invokes PowerShell | Explicit noninteractive payload; check exit and generated artifacts |
 | Statement pipeline | Sort objects emitted by a `foreach` statement | Collect output, use a pipeline cmdlet, or wrap the statement |
 | Statement to JSON | Serialize objects emitted by a `foreach` statement | Wrap or collect statement results before serialization; preserve each object's values |
+| Cross-language UTF-8 | Python reads and rewrites known UTF-8 JSON containing Chinese after PowerShell creates it | Explicit UTF-8 at Python's file boundaries; preserve text and JSON structure |
+| Native command sequence | An `rg` input error is followed by a successful native command | Preserve and report the first failure even after the later exit overwrites `$LASTEXITCODE` |
 | Missing PID input | Read a service PID file that may be missing | Terminating input/conversion errors; do not assign automatic `$PID` |
 | Host rejection | Host denies an authorized destructive action | No equivalent retry through another shell/API; report remaining work |
 | Codex force-delete rejection | Windows Full Access, approval never, Remove-Item with Force rejected before startup; local rule check has no matches | Explain possible built-in dangerous-command classification; preserve the target, do not retry without Force, distinguish host denial from PowerShell or ACL errors |
@@ -115,6 +117,8 @@ The local regression suite checks actual values and outcomes:
 - Missing cmdlet input terminates before a false success message.
 - Unicode stdin bytes and LF UTF-8 files match exactly without trimming; a
   separate text-pipeline probe exposes the appended platform newline.
+- A PowerShell-written UTF-8 JSON file survives a Python read/write round trip;
+  a failed native search remains a failure after a later successful native call.
 - Native stdout redirection and native-to-native pipes preserve binary bytes.
 - Literal bracket paths, grouped cmdlet conditions, stable JSON arrays, nested
   data, and same-encoding appends retain their values.

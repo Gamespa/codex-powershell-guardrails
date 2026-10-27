@@ -57,3 +57,21 @@ $appendPath = Join-Path $fixtureRoot 'utf16-log.txt'
 Set-Content -LiteralPath $appendPath -Value $unicodeText -Encoding unicode -NoNewline
 Add-Content -LiteralPath $appendPath -Value $unicodeText -Encoding unicode -NoNewline
 Assert-Behavior ((Get-Content -LiteralPath $appendPath -Raw -Encoding unicode) -ceq ($unicodeText + $unicodeText)) 'Appending with the existing encoding corrupted text.'
+
+$jsonInput = Join-Path $fixtureRoot 'unicode-input.json'
+$jsonOutput = Join-Path $fixtureRoot 'unicode-output.json'
+$jsonValue = ([string][char]0x4F60) + [char]0x597D
+$jsonText = ConvertTo-Json -InputObject @{ message = $jsonValue } -Compress
+Set-Content -LiteralPath $jsonInput -Value $jsonText -Encoding utf8NoBOM -NoNewline
+$pythonJson = Write-Fixture 'unicode-json.py' @'
+import json
+import sys
+from pathlib import Path
+source, destination = map(Path, sys.argv[1:])
+record = json.loads(source.read_text(encoding='utf-8'))
+destination.write_text(json.dumps(record, ensure_ascii=False), encoding='utf-8')
+'@
+& python $pythonJson $jsonInput $jsonOutput
+$pythonExit = $LASTEXITCODE
+$pythonRoundTrip = Get-Content -LiteralPath $jsonOutput -Raw -Encoding utf8 | ConvertFrom-Json
+Assert-Behavior ($pythonExit -eq 0 -and $pythonRoundTrip.message -ceq $jsonValue) 'Explicit UTF-8 Python JSON round trip changed Unicode text.'

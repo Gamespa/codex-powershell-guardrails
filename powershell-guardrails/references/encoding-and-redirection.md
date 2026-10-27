@@ -6,8 +6,15 @@ stdin, not that newline or file output. Avoid text round trips for binary data.
 
 Choose encoding and newlines for the consumer. Bash script files normally need
 LF and UTF-8 without BOM; other text protocols can have different contracts.
-Text files default to UTF-8 without BOM. Preserve a different known consumer
+PowerShell text files default to UTF-8 without BOM. Preserve a different known consumer
 encoding, including ANSI/OEM or BOM requirements, when explicitly needed.
+
+Each producer and consumer has its own encoding contract. On Windows, Python's
+default text encoding can depend on its runtime configuration or locale, even
+when PowerShell writes UTF-8. For a file known to be UTF-8, specify
+`encoding='utf-8'` in Python's `Path.read_text()` and `Path.write_text()` (or
+`open()`). Establish an unknown file's encoding before reading or rewriting it;
+do not assume every input is UTF-8.
 
 Direct native stdout redirection (`tool.exe > file`) and
 native-to-native pipes preserve bytes. Inserting a text cmdlet or merging

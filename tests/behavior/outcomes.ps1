@@ -27,6 +27,20 @@ $probeOutput = & $childShell -NoLogo -NoProfile -NonInteractive -File $cmdletPro
 $probeExit = $LASTEXITCODE
 Assert-Behavior ($probeExit -ne 0 -and ($probeOutput -join "`n") -notmatch 'false-success') 'Cmdlet failure was hidden.'
 
+$chainProbe = Write-Fixture 'native-chain.ps1' @'
+param([string]$SearchTool, [string]$MissingPath, [string]$ExistingPath)
+$PSNativeCommandUseErrorActionPreference = $false
+$null = & $SearchTool -l -- 'alpha' $MissingPath 2>&1
+$firstExit = $LASTEXITCODE
+$null = & $SearchTool -l -- 'alpha' $ExistingPath
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+'later-command-succeeded'
+exit $firstExit
+'@
+$chainOutput = & $childShell -NoLogo -NoProfile -NonInteractive -File $chainProbe $searchTool (Join-Path $fixtureRoot 'missing.txt') $searchPath
+$chainExit = $LASTEXITCODE
+Assert-Behavior ($chainExit -eq 2 -and $chainOutput -contains 'later-command-succeeded') 'Later native success masked the earlier search failure.'
+
 $secretMarker = 'fixture-value-' + [guid]::NewGuid().ToString('N')
 $credentialPath = Write-Fixture 'credentials.txt' ('api_token=' + $secretMarker)
 $rawRecords = & $searchTool --json -- 'api_token' $credentialPath
